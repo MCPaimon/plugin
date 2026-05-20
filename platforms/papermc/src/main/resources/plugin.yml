@@ -1,0 +1,12 @@
+name: ${name}
+version: ${version}
+main: io.github.mcpaimon.papermc.MCAIPlugin
+
+commands:
+  ai:
+    description: Main command for MCAI system
+    usage: /ai <subcommand>
+
+api-version: '1.20'
+author: MCPaimon
+description: A plugin for PaperMC

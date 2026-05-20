@@ -1,0 +1,22 @@
+dependencies {
+    compileOnly project(':api')
+    compileOnly 'com.zaxxer:HikariCP:7.0.2'
+    compileOnly 'org.mongodb:mongodb-driver-sync:5.7.0'
+}
+
+base {
+    archivesName = "${rootProject.name}-common"
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            
+            pom {
+                name = project.name
+                description = "MCPaimon Plugin Common"
+            }
+        }
+    }
+}

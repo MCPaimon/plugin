@@ -1,0 +1,110 @@
+plugins {
+    id 'com.gradleup.shadow' version '9.4.1'
+}
+
+repositories {
+    maven {
+        name = "papermc-repo"
+        url = "https://repo.papermc.io/repository/maven-public/"
+    }
+}
+
+dependencies {
+    implementation project(':api')
+    implementation project(':common')
+    implementation project(':bukkit')
+
+    implementation 'com.zaxxer:HikariCP:7.0.2'
+    implementation 'io.github.mcengine:mcextension:2026.0.6-1'
+    implementation 'org.mongodb:mongodb-driver-sync:5.7.0'
+    compileOnly 'org.xerial:sqlite-jdbc:3.53.0.0'
+
+    compileOnly 'io.papermc.paper:paper-api:26.1.2.build.+'
+}
+
+jar {
+    enabled = false
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    mergeServiceFiles()
+    
+    // Ensure all implementation dependencies are shadowed
+    configurations = [project.configurations.runtimeClasspath]
+
+    relocate "io.github.mcengine", "io.github.mcpaimon"
+}
+
+processResources {
+    def props = [
+        version: project.version,
+        group: project.group,
+        name: 'MCAI'
+    ]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}
+
+base {
+    archivesName = "${rootProject.name}-papermc"
+}
+
+publishing {
+    publications {
+        shadow(MavenPublication) {
+            from components.java
+            artifact shadowJar
+            
+            pom {
+                name = project.name
+                description = "MCPaimon Plugin PaperMC"
+            }
+        }
+    }
+}
+
+build.dependsOn shadowJar
+
+tasks.register('exportJar') {
+    dependsOn shadowJar
+    
+    // Capture values at configuration time to support Configuration Cache
+    def exportPath = System.getenv("PAPERMC_PLUGIN_JAR_PATH")
+    def projectName = rootProject.name
+    def shadowJarFile = shadowJar.archiveFile
+    
+    doLast {
+        if (exportPath != null && !exportPath.isEmpty()) {
+            def destDir = new File(exportPath)
+            if (destDir.exists() && destDir.isDirectory()) {
+                // Delete existing jars starting with projectName
+                destDir.listFiles().each { f ->
+                    if (f.name.startsWith(projectName) && f.name.endsWith(".jar")) {
+                        println "Deleting existing plugin jar: ${f.name}"
+                        f.delete()
+                    }
+                }
+                
+                // Copy the new jar using Java NIO for Configuration Cache compatibility
+                def sourceFile = shadowJarFile.get().asFile
+                def targetFile = new File(destDir, sourceFile.name)
+                
+                java.nio.file.Files.copy(
+                    sourceFile.toPath(), 
+                    targetFile.toPath(), 
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+                
+                println "Exported ${sourceFile.name} to ${exportPath}"
+            } else {
+                println "Export path does not exist or is not a directory: ${exportPath}"
+            }
+        }
+    }
+}
+
+build.finalizedBy exportJar
