@@ -1,4 +1,4 @@
-package io.github.mcpaimon.api.tool;
+package io.github.mcpaimon.api.tools;
 
 import io.github.mcpaimon.api.model.AIAccount;
 

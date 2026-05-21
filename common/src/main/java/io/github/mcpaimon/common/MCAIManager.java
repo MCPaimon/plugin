@@ -43,6 +43,10 @@ public class MCAIManager {
     public List<AITool> getAllRegisteredTools() { return new ArrayList<>(this.registeredTools.values()); }
     
     public CompletableFuture<String> executeToolCall(String toolName, Map<String, Object> arguments, AIAccount account) {
-        return registeredTools.getOrDefault(toolName, (args, acc) -> CompletableFuture.completedFuture("Unknown Tool")).execute(arguments, account);
+        AITool tool = registeredTools.get(toolName);
+        if (tool == null) {
+            return CompletableFuture.completedFuture("Error: Unknown Tool '" + toolName + "'");
+        }
+        return tool.execute(arguments, account);
     }
 }

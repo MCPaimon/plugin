@@ -18,13 +18,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Command and TabCompleter for the /ai command.
- */
 public class MCAICommand implements TabExecutor {
 
     private final MCAIPlugin plugin;
-    // Cache ข้อมูลเพื่อใช้ใน TabComplete โดยไม่บล็อก Thread หลัก
     private final List<AIPlatform> platformCache = new ArrayList<>();
     private final ConcurrentHashMap<Integer, List<AIModel>> modelCache = new ConcurrentHashMap<>();
 
@@ -33,7 +29,7 @@ public class MCAICommand implements TabExecutor {
         refreshCache();
     }
 
-    private void refreshCache() {
+    public void refreshCache() {
         this.plugin.getProvider().getPlatforms().thenAccept(platforms -> {
             this.platformCache.clear();
             this.platformCache.addAll(platforms);
@@ -45,50 +41,62 @@ public class MCAICommand implements TabExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        // ... (Logic onCommand เดิมของคุณที่แก้ไขแล้ว)
-        // อย่าลืมเรียก refreshCache() ในกรณีที่มีการสร้าง platform/model ใหม่ เพื่อให้ TabComplete อัปเดตข้อมูล
-        if (args.length >= 2 && args[0].equalsIgnoreCase("platform") && args[1].equalsIgnoreCase("create")) {
-            // ... หลังจาก registerPlatform สำเร็จ ให้เรียก refreshCache();
+        if (!(sender instanceof Player player)) return true;
+
+        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+            sendHelp(player, sender.isOp());
+            return true;
         }
+
+        // /ai active set <platform> <model>
+        if (args[0].equalsIgnoreCase("active") && args.length >= 4 && args[1].equalsIgnoreCase("set")) {
+            handleActiveSet(player, args[2], args[3]);
+            return true;
+        }
+
+        // /ai token set <platform> <token>
+        if (args[0].equalsIgnoreCase("token") && args.length >= 4 && args[1].equalsIgnoreCase("set")) {
+            handleTokenSet(player, args[2], String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
+            return true;
+        }
+
+        // Admin commands... (เพิ่ม logic เดิมของคุณที่นี่)
         return true;
+    }
+
+    private void handleActiveSet(Player player, String pName, String mName) {
+        platformCache.stream().filter(p -> p.displayName().equalsIgnoreCase(pName)).findFirst().ifPresent(p -> {
+            this.plugin.getManager().setActiveSession("player", player.getUniqueId().toString(), p.id(), mName).thenRun(() -> {
+                player.sendMessage(Component.text("[MCAI] Active AI set!", NamedTextColor.GREEN));
+                refreshCache();
+            });
+        });
+    }
+
+    private void handleTokenSet(Player player, String pName, String token) {
+        platformCache.stream().filter(p -> p.displayName().equalsIgnoreCase(pName)).findFirst().ifPresent(p -> {
+            this.plugin.getManager().setupAccount("player", player.getUniqueId().toString(), p.id(), token).thenRun(() -> {
+                player.sendMessage(Component.text("[MCAI] Token set!", NamedTextColor.GREEN));
+            });
+        });
+    }
+
+    private void sendHelp(Player player, boolean isOp) {
+        player.sendMessage(Component.text("--- MCAI Help ---", NamedTextColor.YELLOW));
+        player.sendMessage(Component.text("/ai active set <platform> <model>"));
+        player.sendMessage(Component.text("/ai token set <platform> <token>"));
     }
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         List<String> completions = new ArrayList<>();
-        
         if (args.length == 1) {
-            if ("active".startsWith(args[0].toLowerCase())) completions.add("active");
-            if ("token".startsWith(args[0].toLowerCase())) completions.add("token");
-            if ("help".startsWith(args[0].toLowerCase())) completions.add("help");
-            if (sender.isOp()) {
-                if ("platform".startsWith(args[0].toLowerCase())) completions.add("platform");
-                if ("model".startsWith(args[0].toLowerCase())) completions.add("model");
-            }
-        } 
-        else if (args.length == 2 && args[1].isEmpty()) {
-            if (args[0].equalsIgnoreCase("active") || args[0].equalsIgnoreCase("token")) {
-                completions.add("set");
-            } else if (sender.isOp() && (args[0].equalsIgnoreCase("platform") || args[0].equalsIgnoreCase("model"))) {
-                completions.add("create");
-            }
-        }
-        else if (args.length == 3 && args[1].equalsIgnoreCase("set")) {
-            for (AIPlatform p : platformCache) {
-                if (p.displayName().toLowerCase().startsWith(args[2].toLowerCase())) completions.add(p.displayName());
-            }
-        } 
-        else if (args.length == 4 && args[0].equalsIgnoreCase("active")) {
-            for (AIPlatform p : platformCache) {
-                if (p.displayName().equalsIgnoreCase(args[2])) {
-                    List<AIModel> models = modelCache.get(p.id());
-                    if (models != null) {
-                        for (AIModel m : models) {
-                            if (m.modelId().toLowerCase().startsWith(args[3].toLowerCase())) completions.add(m.modelId());
-                        }
-                    }
-                }
-            }
+            completions.addAll(List.of("active", "token", "help"));
+            if (sender.isOp()) completions.addAll(List.of("platform", "model"));
+        } else if (args.length == 2 && args[1].isEmpty()) {
+            if (args[0].equalsIgnoreCase("active") || args[0].equalsIgnoreCase("token")) completions.add("set");
+        } else if (args.length == 3 && (args[0].equalsIgnoreCase("active") || args[0].equalsIgnoreCase("token"))) {
+            platformCache.forEach(p -> completions.add(p.displayName()));
         }
         return completions;
     }

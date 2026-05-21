@@ -8,7 +8,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import io.github.mcpaimon.api.model.AIAccount;
 import io.github.mcpaimon.api.model.AIPlatform;
-import io.github.mcpaimon.api.tool.AITool;
+import io.github.mcpaimon.api.tools.AITool;
 import io.github.mcpaimon.common.MCAIProvider;
 
 import java.net.URI;

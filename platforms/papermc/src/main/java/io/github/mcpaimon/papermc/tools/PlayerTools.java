@@ -1,7 +1,7 @@
 package io.github.mcpaimon.papermc.tools;
 
 import io.github.mcpaimon.api.model.AIAccount;
-import io.github.mcpaimon.api.tool.AITool;
+import io.github.mcpaimon.api.tools.AITool;
 import io.github.mcpaimon.common.MCAIManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
