@@ -1,5 +1,6 @@
 package io.github.mcpaimon.papermc.listeners;
 
+import io.github.mcpaimon.api.model.AIActiveSession;
 import io.github.mcpaimon.common.MCAIProvider;
 import io.github.mcpaimon.papermc.MCAIPlugin;
 import io.papermc.paper.event.player.AsyncChatEvent;
@@ -12,10 +13,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-/**
- * Listens to player chat and intercepts it if they are in AI chat mode.
- * Dispatches the message to the central AI provider dynamically based on player's model.
- */
 public class MCAIListener implements Listener {
 
     private final MCAIPlugin plugin;
@@ -33,9 +30,7 @@ public class MCAIListener implements Listener {
         Player player = event.getPlayer();
 
         if (this.plugin.getAiChatSessions().contains(player.getUniqueId())) {
-            
             event.setCancelled(true);
-
             String message = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
 
             if (message.equalsIgnoreCase("quit") || message.equalsIgnoreCase("exit")) {
@@ -53,17 +48,24 @@ public class MCAIListener implements Listener {
 
             player.sendMessage(Component.text("[System]: Processing your request...", NamedTextColor.GRAY));
 
-            // Fetch the dynamically configured model for this specific player
-            String activeModel = this.plugin.getActiveModel(player.getUniqueId());
+            // Fetch dynamic Active Session from Database
+            this.plugin.getManager().getActiveSession("player", player.getUniqueId().toString()).thenAccept(sessionOpt -> {
+                if (sessionOpt.isEmpty()) {
+                    player.sendMessage(Component.text("[System Error]: No active AI session found. Please use /ai set active.", NamedTextColor.RED));
+                    return;
+                }
+                
+                AIActiveSession session = sessionOpt.get();
 
-            this.provider.sendPrompt("player", player.getUniqueId().toString(), activeModel, message, this.aiClient)
-                .thenAccept(response -> {
-                    player.sendMessage(Component.text("[AI]: ", NamedTextColor.LIGHT_PURPLE).append(Component.text(response, NamedTextColor.WHITE)));
-                })
-                .exceptionally(throwable -> {
-                    player.sendMessage(Component.text("[System Error]: Failed to get response from AI. " + throwable.getMessage(), NamedTextColor.RED));
-                    return null;
-                });
+                this.provider.sendPrompt("player", player.getUniqueId().toString(), session.platformId(), session.modelId(), message, this.aiClient)
+                    .thenAccept(response -> {
+                        player.sendMessage(Component.text("[AI]: ", NamedTextColor.LIGHT_PURPLE).append(Component.text(response, NamedTextColor.WHITE)));
+                    })
+                    .exceptionally(throwable -> {
+                        player.sendMessage(Component.text("[System Error]: Failed to get response from AI. " + throwable.getMessage(), NamedTextColor.RED));
+                        return null;
+                    });
+            });
         }
     }
 

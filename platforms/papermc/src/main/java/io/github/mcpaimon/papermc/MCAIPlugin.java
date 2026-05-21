@@ -2,6 +2,7 @@ package io.github.mcpaimon.papermc;
 
 import io.github.mcengine.mcextension.common.MCExtensionManager;
 import io.github.mcpaimon.api.database.IAIDatabase;
+import io.github.mcpaimon.api.model.AIPlatform;
 import io.github.mcpaimon.common.MCAIManager;
 import io.github.mcpaimon.common.MCAIProvider;
 import io.github.mcpaimon.common.client.MCAIAPIClient;
@@ -16,25 +17,17 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 
-/**
- * Main PaperMC Plugin class for MCAI.
- */
 public class MCAIPlugin extends JavaPlugin {
 
     private MCAIManager manager;
     private MCAIProvider provider;
     private MCExtensionManager extensionManager;
-    
     private final Set<UUID> aiChatSessions = new HashSet<>();
-    // Store the active model per player
-    private final Map<UUID, String> activeModels = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -52,38 +45,62 @@ public class MCAIPlugin extends JavaPlugin {
         
         if (dbType.equalsIgnoreCase("postgresql")) {
             logger.info("Using PostgreSQL Database...");
-            String host = getConfig().getString("database.postgresql.host");
-            int port = getConfig().getInt("database.postgresql.port");
-            String dbName = getConfig().getString("database.postgresql.database");
-            String user = getConfig().getString("database.postgresql.username");
-            String pass = getConfig().getString("database.postgresql.password");
-            database = new MCAIPostgreSQL(host, port, dbName, user, pass);
+            database = new MCAIPostgreSQL(
+                getConfig().getString("database.postgresql.host"),
+                getConfig().getInt("database.postgresql.port"),
+                getConfig().getString("database.postgresql.database"),
+                getConfig().getString("database.postgresql.username"),
+                getConfig().getString("database.postgresql.password")
+            );
         } else {
             logger.info("Using SQLite Database...");
-            File dbFile = new File(getDataFolder(), getConfig().getString("database.sqlite.file", "mcai.db"));
-            database = new MCAISQLite(dbFile);
+            database = new MCAISQLite(new File(getDataFolder(), getConfig().getString("database.sqlite.file", "mcai.db")));
         }
 
         this.manager = new MCAIManager(database, logger);
         this.provider = new MCAIProvider(this.manager, database);
         
+        // Wait for database tables to be created
         this.manager.initialize().join();
 
-        // Auto-create platforms and models from config
+        // Auto-create platforms and models from config safely
         List<String> platformsConfig = getConfig().getStringList("platforms");
-        if (platformsConfig != null) {
-            for (String entry : platformsConfig) {
-                String[] parts = entry.split(",");
-                if (parts.length >= 3) {
-                    this.manager.registerPlatform(parts[0].trim(), parts[1].trim()).thenAccept(p -> {
-                        this.manager.registerModel(p.id(), parts[2].trim());
-                    });
+        if (platformsConfig != null && !platformsConfig.isEmpty()) {
+            try {
+                // Fetch existing platforms to avoid duplicates
+                List<AIPlatform> existingPlatforms = this.provider.getPlatforms().join();
+                
+                for (String entry : platformsConfig) {
+                    String[] parts = entry.split(",");
+                    if (parts.length >= 3) {
+                        String pName = parts[0].trim();
+                        String pUrl = parts[1].trim();
+                        String pModel = parts[2].trim();
+                        
+                        // Check if platform already exists
+                        AIPlatform targetPlatform = existingPlatforms.stream()
+                                .filter(p -> p.displayName().equalsIgnoreCase(pName))
+                                .findFirst()
+                                .orElse(null);
+                                
+                        if (targetPlatform == null) {
+                            // Create new platform and block until finished (.join)
+                            targetPlatform = this.manager.registerPlatform(pName, pUrl).join();
+                            existingPlatforms.add(targetPlatform); // Update local cache
+                            logger.info("Auto-registered new platform: " + pName);
+                        }
+                        
+                        // Register the model for this platform and block until finished
+                        this.manager.registerModel(targetPlatform.id(), pModel).join();
+                        logger.info("Auto-registered model: " + pModel + " for platform: " + pName);
+                    }
                 }
+            } catch (Exception e) {
+                logger.severe("Error during auto-creating platforms/models: " + e.getMessage());
             }
         }
 
         PlayerTools.registerAll(this.manager);
-
         MCAIAPIClient aiClient = new MCAIAPIClient();
 
         logger.info("Loading extensions...");
@@ -91,13 +108,11 @@ public class MCAIPlugin extends JavaPlugin {
         Executor mainThreadExecutor = command -> Bukkit.getScheduler().runTask(this, command);
         this.extensionManager.loadAllExtensions(this, mainThreadExecutor);
 
-        // Register Command and TabCompleter
         MCAICommand aiCommand = new MCAICommand(this);
         getCommand("ai").setExecutor(aiCommand);
         getCommand("ai").setTabCompleter(aiCommand);
         
         getServer().getPluginManager().registerEvents(new MCAIListener(this, this.provider, aiClient), this);
-
         logger.info("MCAI Plugin has been successfully enabled!");
     }
 
@@ -110,30 +125,11 @@ public class MCAIPlugin extends JavaPlugin {
             };
             this.extensionManager.disableAllExtensions(this, disableExecutor);
         }
-
-        if (this.manager != null) {
-            this.manager.shutdown().join();
-        }
+        if (this.manager != null) this.manager.shutdown().join();
         getLogger().info("MCAI Plugin has been disabled!");
     }
 
-    public MCAIManager getManager() {
-        return this.manager;
-    }
-
-    public MCAIProvider getProvider() {
-        return this.provider;
-    }
-
-    public Set<UUID> getAiChatSessions() {
-        return this.aiChatSessions;
-    }
-
-    public void setActiveModel(UUID uuid, String modelId) {
-        this.activeModels.put(uuid, modelId);
-    }
-
-    public String getActiveModel(UUID uuid) {
-        return this.activeModels.get(uuid);
-    }
+    public MCAIManager getManager() { return this.manager; }
+    public MCAIProvider getProvider() { return this.provider; }
+    public Set<UUID> getAiChatSessions() { return this.aiChatSessions; }
 }
