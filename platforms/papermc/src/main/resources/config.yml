@@ -1,0 +1,20 @@
+enable: false
+
+license: "free"
+
+database:
+  type: "sqlite"
+  sqlite:
+    file: "mcai.db"
+  postgresql:
+    host: "localhost"
+    port: 5432
+    database: "mcai"
+    username: "postgres"
+    password: "password"
+  mongodb:
+    uri: "mongodb://localhost:27017"
+    database: "mcai"
+
+platforms:
+  - deepseek,https://api.deepseek.com,deepseek-chat
