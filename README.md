@@ -31,7 +31,7 @@ database:
 
 platforms:
   # Format: name,url,model1,model2...
-  - deepseek,[https://api.deepseek.com](https://api.deepseek.com),deepseek-chat
+  - deepseek,https://api.deepseek.com,deepseek-chat
 ```
 
 ## Creating Extensions (Custom AI Tools)
