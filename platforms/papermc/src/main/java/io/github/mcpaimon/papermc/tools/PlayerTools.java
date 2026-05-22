@@ -29,6 +29,8 @@ public class PlayerTools {
         manager.registerTool(new DeleteTokenTool(manager));
         manager.registerTool(new GetCurrentDateTool());
         manager.registerTool(new GetInGameTimeTool());
+        manager.registerTool(new GetPlayerHealthTool());
+        manager.registerTool(new GetPlayerFoodTool());
     }
 
     /**
@@ -267,6 +269,92 @@ public class PlayerTools {
             return CompletableFuture.completedFuture(
                 "The current in-game time in world '" + sender.getWorld().getName() + "' is " + time + " ticks. " +
                 "(Note: 0 = 6:00 AM, 6000 = 12:00 PM (Noon), 12000 = 6:00 PM, 18000 = 12:00 AM (Midnight))"
+            );
+        }
+    }
+
+    /**
+     * Tool to get a player's health.
+     * Logic: Player can check themselves. OP can check anyone.
+     */
+    public static class GetPlayerHealthTool implements AITool {
+        @Override
+        public String getName() { return "get_player_health"; }
+
+        @Override
+        public String getDescription() { 
+            return "Gets the current health and maximum health of a player. Omit 'targetName' to check the player currently talking to you."; 
+        }
+
+        @Override
+        public String getParametersJsonSchema() {
+            return "{ \"type\": \"object\", \"properties\": { \"targetName\": { \"type\": \"string\" } } }";
+        }
+
+        @Override
+        public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
+            Player sender = getBukkitPlayer(account);
+            if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+
+            String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : sender.getName();
+            Player target = Bukkit.getPlayer(targetName);
+            
+            if (target == null) return CompletableFuture.completedFuture("Error: Target player is offline or does not exist.");
+
+            // Permission Check
+            if (!sender.getName().equalsIgnoreCase(targetName) && !sender.isOp()) {
+                return CompletableFuture.completedFuture("Error: Access Denied. You do not have OP permission to view other players' health.");
+            }
+
+            double currentHealth = target.getHealth();
+            double maxHealth = target.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH) != null 
+                ? target.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue() 
+                : 20.0;
+
+            return CompletableFuture.completedFuture(
+                "Success. Name: " + target.getName() + " | Health: " + String.format("%.1f", currentHealth) + " / " + String.format("%.1f", maxHealth)
+            );
+        }
+    }
+
+    /**
+     * Tool to get a player's food level and saturation.
+     * Logic: Player can check themselves. OP can check anyone.
+     */
+    public static class GetPlayerFoodTool implements AITool {
+        @Override
+        public String getName() { return "get_player_food"; }
+
+        @Override
+        public String getDescription() { 
+            return "Gets the current food level (hunger) and saturation of a player. Omit 'targetName' to check the player currently talking to you."; 
+        }
+
+        @Override
+        public String getParametersJsonSchema() {
+            return "{ \"type\": \"object\", \"properties\": { \"targetName\": { \"type\": \"string\" } } }";
+        }
+
+        @Override
+        public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
+            Player sender = getBukkitPlayer(account);
+            if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+
+            String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : sender.getName();
+            Player target = Bukkit.getPlayer(targetName);
+            
+            if (target == null) return CompletableFuture.completedFuture("Error: Target player is offline or does not exist.");
+
+            // Permission Check
+            if (!sender.getName().equalsIgnoreCase(targetName) && !sender.isOp()) {
+                return CompletableFuture.completedFuture("Error: Access Denied. You do not have OP permission to view other players' food level.");
+            }
+
+            int foodLevel = target.getFoodLevel();
+            float saturation = target.getSaturation();
+
+            return CompletableFuture.completedFuture(
+                "Success. Name: " + target.getName() + " | Food Level: " + foodLevel + " / 20 | Saturation: " + String.format("%.1f", saturation)
             );
         }
     }
