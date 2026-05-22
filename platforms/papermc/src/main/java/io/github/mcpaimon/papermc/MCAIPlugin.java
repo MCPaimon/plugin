@@ -10,7 +10,6 @@ import io.github.mcpaimon.common.database.postgresql.MCAIPostgreSQL;
 import io.github.mcpaimon.common.database.sqlite.MCAISQLite;
 import io.github.mcpaimon.papermc.commands.MCAICommand;
 import io.github.mcpaimon.papermc.listeners.MCAIListener;
-import io.github.mcpaimon.papermc.tools.PlayerTools;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -115,7 +114,6 @@ public class MCAIPlugin extends JavaPlugin {
             logger.warning("No platforms defined in config.yml or 'platforms' list is empty.");
         }
 
-        PlayerTools.registerAll(this.manager);
         MCAIAPIClient aiClient = new MCAIAPIClient();
 
         logger.info("Loading extensions...");
