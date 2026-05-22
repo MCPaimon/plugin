@@ -6,6 +6,8 @@ import io.github.mcpaimon.common.MCAIManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -25,6 +27,8 @@ public class PlayerTools {
         manager.registerTool(new GetTokenTool());
         manager.registerTool(new ChangeTokenTool(manager));
         manager.registerTool(new DeleteTokenTool(manager));
+        manager.registerTool(new GetCurrentDateTool());
+        manager.registerTool(new GetInGameTimeTool());
     }
 
     /**
@@ -214,6 +218,56 @@ public class PlayerTools {
             // Reset token to empty string to effectively "delete" it
             return this.manager.setupAccount(account.accountType(), account.accountUuid(), account.platformId(), "")
                     .thenApply(updatedAccount -> "Success. Your token has been deleted.");
+        }
+    }
+
+    /**
+     * Tool to get the current real-world date and time.
+     */
+    public static class GetCurrentDateTool implements AITool {
+        @Override
+        public String getName() { return "get_current_date"; }
+
+        @Override
+        public String getDescription() { return "Gets the current real-world date and time."; }
+
+        @Override
+        public String getParametersJsonSchema() {
+            return "{ \"type\": \"object\", \"properties\": {} }";
+        }
+
+        @Override
+        public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
+            String currentTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+            return CompletableFuture.completedFuture("The current real-world time is: " + currentTime);
+        }
+    }
+
+    /**
+     * Tool to get the current in-game time of the player's world.
+     */
+    public static class GetInGameTimeTool implements AITool {
+        @Override
+        public String getName() { return "get_in_game_time"; }
+
+        @Override
+        public String getDescription() { return "Gets the current in-game time (Minecraft world time) of the world the player is currently in."; }
+
+        @Override
+        public String getParametersJsonSchema() {
+            return "{ \"type\": \"object\", \"properties\": {} }";
+        }
+
+        @Override
+        public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
+            Player sender = getBukkitPlayer(account);
+            if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+            
+            long time = sender.getWorld().getTime();
+            return CompletableFuture.completedFuture(
+                "The current in-game time in world '" + sender.getWorld().getName() + "' is " + time + " ticks. " +
+                "(Note: 0 = 6:00 AM, 6000 = 12:00 PM (Noon), 12000 = 6:00 PM, 18000 = 12:00 AM (Midnight))"
+            );
         }
     }
 }

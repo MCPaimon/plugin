@@ -16,9 +16,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -53,13 +51,6 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
         return url;
     }
 
-    /**
-     * Generates the current timestamp string to inject into the system prompt.
-     */
-    private String getCurrentTimeContext() {
-        return "Today is " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-    }
-
     @Override
     public CompletableFuture<List<MCAIProvider.ToolCall>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools) {
         return CompletableFuture.supplyAsync(() -> {
@@ -69,10 +60,10 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
 
                 JsonArray messages = new JsonArray();
                 
-                // Add System Context (Time and Strict Multi-tool capability)
+                // Add System Context (Strict Multi-tool capability)
                 JsonObject systemMsg = new JsonObject();
                 systemMsg.addProperty("role", "system");
-                systemMsg.addProperty("content", getCurrentTimeContext() + ". You are a Minecraft AI assistant. CRITICAL INSTRUCTION: If the user asks for multiple distinct pieces of information (e.g., name AND UUID), you MUST invoke ALL necessary tools simultaneously in parallel. Do not wait for one tool's response to call another.");
+                systemMsg.addProperty("content", "You are a Minecraft AI assistant. CRITICAL INSTRUCTION: If the user asks for multiple distinct pieces of information (e.g., name AND UUID, or date AND time), you MUST invoke ALL necessary tools simultaneously in parallel. Do not wait for one tool's response to call another.");
                 messages.add(systemMsg);
 
                 JsonObject userMsg = new JsonObject();
@@ -167,7 +158,7 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 
                 JsonObject systemMsg = new JsonObject();
                 systemMsg.addProperty("role", "system");
-                systemMsg.addProperty("content", getCurrentTimeContext() + ".\nYou are a helpful Minecraft AI assistant. Answer the user based on the tool results provided. Keep it concise and natural.\n\n[System Tool Results]:\n" + toolResults);
+                systemMsg.addProperty("content", "You are a helpful Minecraft AI assistant. Answer the user based on the tool results provided. Keep it concise and natural.\n\n[System Tool Results]:\n" + toolResults);
                 messages.add(systemMsg);
 
                 JsonObject userMsg = new JsonObject();
