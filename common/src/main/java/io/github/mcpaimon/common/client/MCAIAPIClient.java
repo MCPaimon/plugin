@@ -16,7 +16,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -51,6 +53,13 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
         return url;
     }
 
+    /**
+     * Generates the current timestamp string to inject into the system prompt.
+     */
+    private String getCurrentTimeContext() {
+        return "Today is " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+    }
+
     @Override
     public CompletableFuture<List<MCAIProvider.ToolCall>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools) {
         return CompletableFuture.supplyAsync(() -> {
@@ -59,6 +68,13 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 requestBody.addProperty("model", modelId);
 
                 JsonArray messages = new JsonArray();
+                
+                // Add System Context (Time and Multi-tool capability)
+                JsonObject systemMsg = new JsonObject();
+                systemMsg.addProperty("role", "system");
+                systemMsg.addProperty("content", getCurrentTimeContext() + ". You can use multiple tools simultaneously if needed to fulfill the user's request.");
+                messages.add(systemMsg);
+
                 JsonObject userMsg = new JsonObject();
                 userMsg.addProperty("role", "user");
                 userMsg.addProperty("content", prompt);
@@ -122,6 +138,11 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                                 String name = functionCall.get("name").getAsString();
                                 String argumentsStr = functionCall.get("arguments").getAsString();
                                 
+                                // Handle missing or empty arguments by defaulting to empty JSON object
+                                if (argumentsStr == null || argumentsStr.isBlank()) {
+                                    argumentsStr = "{}";
+                                }
+                                
                                 Map<String, Object> args = gson.fromJson(argumentsStr, new TypeToken<Map<String, Object>>(){}.getType());
                                 toolCallsList.add(new MCAIProvider.ToolCall(name, args));
                             }
@@ -146,7 +167,7 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 
                 JsonObject systemMsg = new JsonObject();
                 systemMsg.addProperty("role", "system");
-                systemMsg.addProperty("content", "You are a helpful Minecraft AI assistant. Answer the user based on the tool results provided. Keep it concise and natural.\n\n[System Tool Results]:\n" + toolResults);
+                systemMsg.addProperty("content", getCurrentTimeContext() + ".\nYou are a helpful Minecraft AI assistant. Answer the user based on the tool results provided. Keep it concise and natural.\n\n[System Tool Results]:\n" + toolResults);
                 messages.add(systemMsg);
 
                 JsonObject userMsg = new JsonObject();

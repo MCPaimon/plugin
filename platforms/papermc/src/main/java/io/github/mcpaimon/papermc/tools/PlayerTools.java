@@ -20,6 +20,7 @@ public class PlayerTools {
      * @param manager The central MCAIManager.
      */
     public static void registerAll(MCAIManager manager) {
+        manager.registerTool(new GetSelfNameTool());
         manager.registerTool(new GetPlayerInfoTool());
         manager.registerTool(new GetTokenTool());
         manager.registerTool(new ChangeTokenTool(manager));
@@ -38,6 +39,30 @@ public class PlayerTools {
     }
 
     /* --- Tool Implementations --- */
+
+    /**
+     * Tool to get the name of the player currently talking to the AI.
+     */
+    public static class GetSelfNameTool implements AITool {
+        @Override
+        public String getName() { return "get_self_name"; }
+
+        @Override
+        public String getDescription() { return "Gets the in-game name of the player who is currently talking to you."; }
+
+        @Override
+        public String getParametersJsonSchema() {
+            return "{ \"type\": \"object\", \"properties\": {} }";
+        }
+
+        @Override
+        public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
+            Player sender = getBukkitPlayer(account);
+            if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+
+            return CompletableFuture.completedFuture("The player currently talking to you is: " + sender.getName());
+        }
+    }
 
     /**
      * Tool to get a player's UUID.
