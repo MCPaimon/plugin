@@ -22,6 +22,9 @@ import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 
+/**
+ * Main plugin class for MCAI on PaperMC.
+ */
 public class MCAIPlugin extends JavaPlugin {
 
     private MCAIManager manager;
@@ -71,11 +74,11 @@ public class MCAIPlugin extends JavaPlugin {
                 List<AIPlatform> existingPlatforms = this.provider.getPlatforms().join();
                 
                 for (String entry : platformsConfig) {
+                    // Split by comma and support multiple models trailing behind the URL
                     String[] parts = entry.split(",");
                     if (parts.length >= 3) {
                         String pName = parts[0].trim();
                         String pUrl = parts[1].trim();
-                        String pModel = parts[2].trim();
                         
                         // Check if platform already exists
                         AIPlatform targetPlatform = existingPlatforms.stream()
@@ -88,16 +91,28 @@ public class MCAIPlugin extends JavaPlugin {
                             targetPlatform = this.manager.registerPlatform(pName, pUrl).join();
                             existingPlatforms.add(targetPlatform); // Update local cache
                             logger.info("Auto-registered new platform: " + pName);
+                        } else {
+                            logger.info("Found existing platform: " + pName);
                         }
                         
-                        // Register the model for this platform and block until finished
-                        this.manager.registerModel(targetPlatform.id(), pModel).join();
-                        logger.info("Auto-registered model: " + pModel + " for platform: " + pName);
+                        // Register ALL models listed for this platform (Loop from index 2 onwards)
+                        for (int i = 2; i < parts.length; i++) {
+                            String pModel = parts[i].trim();
+                            if (!pModel.isEmpty()) {
+                                this.manager.registerModel(targetPlatform.id(), pModel).join();
+                                logger.info("Auto-registered model: " + pModel + " for platform: " + pName);
+                            }
+                        }
+                    } else {
+                        logger.warning("Invalid format in config.yml -> platforms. Expected 'name,url,model1,model2...', but got: " + entry);
                     }
                 }
             } catch (Exception e) {
                 logger.severe("Error during auto-creating platforms/models: " + e.getMessage());
+                e.printStackTrace(); // Print full stack trace for debugging
             }
+        } else {
+            logger.warning("No platforms defined in config.yml or 'platforms' list is empty.");
         }
 
         PlayerTools.registerAll(this.manager);
@@ -109,8 +124,12 @@ public class MCAIPlugin extends JavaPlugin {
         this.extensionManager.loadAllExtensions(this, mainThreadExecutor);
 
         MCAICommand aiCommand = new MCAICommand(this);
-        getCommand("ai").setExecutor(aiCommand);
-        getCommand("ai").setTabCompleter(aiCommand);
+        if (getCommand("ai") != null) {
+            getCommand("ai").setExecutor(aiCommand);
+            getCommand("ai").setTabCompleter(aiCommand);
+        } else {
+            logger.severe("Command 'ai' is not registered in plugin.yml!");
+        }
         
         getServer().getPluginManager().registerEvents(new MCAIListener(this, this.provider, aiClient), this);
         logger.info("MCAI Plugin has been successfully enabled!");

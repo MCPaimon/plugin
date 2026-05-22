@@ -35,6 +35,22 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
         this.gson = new Gson();
     }
 
+    /**
+     * Helper method to ensure the URL has the correct endpoint path for OpenAI-compatible APIs.
+     */
+    private String formatUrl(String url) {
+        if (url == null || url.isBlank()) return url;
+        // If the URL does not end with completions endpoint, append it automatically
+        if (!url.endsWith("/chat/completions") && !url.endsWith("/v1/completions")) {
+            if (url.endsWith("/")) {
+                return url + "chat/completions";
+            } else {
+                return url + "/chat/completions";
+            }
+        }
+        return url;
+    }
+
     @Override
     public CompletableFuture<List<MCAIProvider.ToolCall>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools) {
         return CompletableFuture.supplyAsync(() -> {
@@ -68,31 +84,47 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                     requestBody.addProperty("tool_choice", "auto"); // Let AI decide
                 }
 
-                // Use dynamic URL from platform.url()
+                String targetUrl = formatUrl(platform.url());
+
                 HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(platform.url()))
+                        .uri(URI.create(targetUrl))
                         .header("Content-Type", "application/json")
                         .header("Authorization", "Bearer " + account.token())
                         .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(requestBody), StandardCharsets.UTF_8))
                         .build();
 
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
 
+                // HTTP Error Checking
+                if (response.statusCode() >= 400) {
+                    throw new RuntimeException("HTTP Error " + response.statusCode() + " | Raw Response: " + response.body());
+                }
+
+                JsonElement parsedElement = JsonParser.parseString(response.body());
+                if (!parsedElement.isJsonObject()) {
+                    throw new RuntimeException("Invalid response format (not JSON object) | Raw Response: " + response.body());
+                }
+
+                JsonObject jsonResponse = parsedElement.getAsJsonObject();
                 List<MCAIProvider.ToolCall> toolCallsList = new ArrayList<>();
                 
                 // Parse AI response for tool calls
                 if (jsonResponse.has("choices")) {
-                    JsonObject messageObj = jsonResponse.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message");
-                    if (messageObj.has("tool_calls")) {
-                        JsonArray toolCalls = messageObj.getAsJsonArray("tool_calls");
-                        for (JsonElement callElement : toolCalls) {
-                            JsonObject functionCall = callElement.getAsJsonObject().getAsJsonObject("function");
-                            String name = functionCall.get("name").getAsString();
-                            String argumentsStr = functionCall.get("arguments").getAsString();
-                            
-                            Map<String, Object> args = gson.fromJson(argumentsStr, new TypeToken<Map<String, Object>>(){}.getType());
-                            toolCallsList.add(new MCAIProvider.ToolCall(name, args));
+                    JsonArray choices = jsonResponse.getAsJsonArray("choices");
+                    if (!choices.isEmpty() && choices.get(0).isJsonObject()) {
+                        JsonObject messageObj = choices.get(0).getAsJsonObject().getAsJsonObject("message");
+                        
+                        // Verify if tool_calls exist and is not null
+                        if (messageObj != null && messageObj.has("tool_calls") && !messageObj.get("tool_calls").isJsonNull()) {
+                            JsonArray toolCalls = messageObj.getAsJsonArray("tool_calls");
+                            for (JsonElement callElement : toolCalls) {
+                                JsonObject functionCall = callElement.getAsJsonObject().getAsJsonObject("function");
+                                String name = functionCall.get("name").getAsString();
+                                String argumentsStr = functionCall.get("arguments").getAsString();
+                                
+                                Map<String, Object> args = gson.fromJson(argumentsStr, new TypeToken<Map<String, Object>>(){}.getType());
+                                toolCallsList.add(new MCAIProvider.ToolCall(name, args));
+                            }
                         }
                     }
                 }
@@ -124,25 +156,44 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
 
                 requestBody.add("messages", messages);
 
+                String targetUrl = formatUrl(platform.url());
+
                 HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(platform.url()))
+                        .uri(URI.create(targetUrl))
                         .header("Content-Type", "application/json")
                         .header("Authorization", "Bearer " + account.token())
                         .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(requestBody), StandardCharsets.UTF_8))
                         .build();
 
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+
+                // HTTP Error Checking
+                if (response.statusCode() >= 400) {
+                    return "API Error (HTTP " + response.statusCode() + "): " + response.body();
+                }
+
+                JsonElement parsedElement = JsonParser.parseString(response.body());
+                if (!parsedElement.isJsonObject()) {
+                    return "Error parsing AI response. Not a JSON object. Raw Response: " + response.body();
+                }
+
+                JsonObject jsonResponse = parsedElement.getAsJsonObject();
 
                 if (jsonResponse.has("choices")) {
-                    return jsonResponse.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message").get("content").getAsString();
+                    JsonArray choices = jsonResponse.getAsJsonArray("choices");
+                    if (!choices.isEmpty() && choices.get(0).isJsonObject()) {
+                        JsonObject messageObj = choices.get(0).getAsJsonObject().getAsJsonObject("message");
+                        if (messageObj != null && messageObj.has("content") && !messageObj.get("content").isJsonNull()) {
+                            return messageObj.get("content").getAsString();
+                        }
+                    }
                 }
                 
                 if (jsonResponse.has("error")) {
                     return "API Error: " + jsonResponse.getAsJsonObject("error").get("message").getAsString();
                 }
                 
-                return "Error parsing AI response.";
+                return "Error: Unexpected response format from AI. Raw: " + response.body();
             } catch (Exception e) {
                 throw new RuntimeException("Failed to generate final summary: " + e.getMessage(), e);
             }
