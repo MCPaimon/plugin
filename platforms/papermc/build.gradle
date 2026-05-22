@@ -26,6 +26,11 @@ jar {
     enabled = false
 }
 
+// Disable Gradle Module Metadata generation to ensure Maven clients pull the shadow jar
+tasks.withType(GenerateModuleMetadata).configureEach {
+    enabled = false
+}
+
 shadowJar {
     archiveClassifier.set('')
     mergeServiceFiles()
