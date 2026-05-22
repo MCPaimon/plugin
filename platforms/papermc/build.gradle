@@ -61,7 +61,6 @@ base {
 publishing {
     publications {
         shadow(MavenPublication) {
-            from components.java
             artifact shadowJar
             
             pom {
