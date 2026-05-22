@@ -69,10 +69,10 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
 
                 JsonArray messages = new JsonArray();
                 
-                // Add System Context (Time and Multi-tool capability)
+                // Add System Context (Time and Strict Multi-tool capability)
                 JsonObject systemMsg = new JsonObject();
                 systemMsg.addProperty("role", "system");
-                systemMsg.addProperty("content", getCurrentTimeContext() + ". You can use multiple tools simultaneously if needed to fulfill the user's request.");
+                systemMsg.addProperty("content", getCurrentTimeContext() + ". You are a Minecraft AI assistant. CRITICAL INSTRUCTION: If the user asks for multiple distinct pieces of information (e.g., name AND UUID), you MUST invoke ALL necessary tools simultaneously in parallel. Do not wait for one tool's response to call another.");
                 messages.add(systemMsg);
 
                 JsonObject userMsg = new JsonObject();

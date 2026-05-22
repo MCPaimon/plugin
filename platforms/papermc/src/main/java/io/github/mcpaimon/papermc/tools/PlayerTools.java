@@ -73,7 +73,9 @@ public class PlayerTools {
         public String getName() { return "get_player_info"; }
 
         @Override
-        public String getDescription() { return "Gets the UUID of a player. Pass 'targetName' to specify who."; }
+        public String getDescription() { 
+            return "Gets the UUID of a player. IMPORTANT: To get the UUID of the player currently talking to you, omit the 'targetName' parameter entirely. You do not need to know their name first."; 
+        }
 
         @Override
         public String getParametersJsonSchema() {
