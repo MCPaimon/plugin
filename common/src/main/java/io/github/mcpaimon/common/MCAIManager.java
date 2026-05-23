@@ -5,16 +5,13 @@ import io.github.mcpaimon.api.model.*;
 import io.github.mcpaimon.api.tools.AITool;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.logging.Logger;
 
 public class MCAIManager {
     private final IAIDatabase database;
-    private final Logger logger;
     private final Map<String, AITool> registeredTools = new ConcurrentHashMap<>();
 
-    public MCAIManager(IAIDatabase database, Logger logger) {
+    public MCAIManager(IAIDatabase database) {
         this.database = database;
-        this.logger = logger;
     }
 
     public CompletableFuture<Void> initialize() { return this.database.initialize(); }
@@ -37,6 +34,14 @@ public class MCAIManager {
 
     public CompletableFuture<Optional<AIActiveSession>> getActiveSession(String accountType, String accountUuid) {
         return this.database.getActiveSession(accountType, accountUuid);
+    }
+
+    /**
+     * Retrieves all registered AI platforms.
+     * @return A CompletableFuture containing a list of all platforms.
+     */
+    public CompletableFuture<List<AIPlatform>> getAllPlatforms() {
+        return this.database.getAllPlatforms();
     }
 
     public void registerTool(AITool tool) { this.registeredTools.put(tool.getName(), tool); }

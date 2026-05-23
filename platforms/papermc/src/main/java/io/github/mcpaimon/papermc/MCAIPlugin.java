@@ -60,7 +60,7 @@ public class MCAIPlugin extends JavaPlugin {
             database = new MCAISQLite(new File(getDataFolder(), getConfig().getString("database.sqlite.file", "mcai.db")));
         }
 
-        this.manager = new MCAIManager(database, logger);
+        this.manager = new MCAIManager(database);
         this.provider = new MCAIProvider(this.manager, database);
         
         // Wait for database tables to be created
