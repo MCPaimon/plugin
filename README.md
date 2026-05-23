@@ -52,10 +52,3 @@ An example extension template is available at: [https://github.com/MCPaimon-Exte
 
 Copyright (c) 2026 MCPaimon. All rights reserved.
 Please see the [LICENSE](https://github.com/MCPaimon/plugin/blob/master/LICENSE) file for more details regarding usage and distribution.
-
-
-
-
-
-
-
