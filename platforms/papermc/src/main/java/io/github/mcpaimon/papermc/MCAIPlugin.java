@@ -10,6 +10,7 @@ import io.github.mcpaimon.common.database.postgresql.MCAIPostgreSQL;
 import io.github.mcpaimon.common.database.sqlite.MCAISQLite;
 import io.github.mcpaimon.papermc.commands.MCAICommand;
 import io.github.mcpaimon.papermc.listeners.MCAIListener;
+import io.github.mcpaimon.papermc.tools.*;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -64,6 +65,12 @@ public class MCAIPlugin extends JavaPlugin {
         
         // Wait for database tables to be created
         this.manager.initialize().join();
+
+        // Register Core Tools
+        logger.info("Registering core AI tools...");
+        this.manager.registerTool(new ChangeTokenTool());
+        this.manager.registerTool(new DeleteTokenTool());
+        this.manager.registerTool(new GetTokenTool());
 
         // Auto-create platforms and models from config safely
         List<String> platformsConfig = getConfig().getStringList("platforms");
