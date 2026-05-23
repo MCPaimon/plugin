@@ -16,24 +16,25 @@ public class MCAIProvider {
         this.database = database;
     }
 
-    public CompletableFuture<String> sendPrompt(String accountType, String accountUuid, int platformId, String modelId, String prompt, IAIWorkflowClient aiClient) {
+    public CompletableFuture<AIResponse> sendPrompt(String accountType, String accountUuid, int platformId, String modelId, String prompt, IAIWorkflowClient aiClient) {
         String type = (accountType == null || accountType.isBlank()) ? DEFAULT_ACCOUNT_TYPE : accountType;
 
         return this.manager.fetchAccount(type, accountUuid, platformId).thenCompose(accountOpt -> {
             if (accountOpt.isEmpty() || accountOpt.get().token().isBlank()) {
-                return CompletableFuture.completedFuture("Error: No API token found. Please register your token first.");
+                return CompletableFuture.completedFuture(new AIResponse("Error: No API token found. Please register your token first.", 0, 0, 0));
             }
             AIAccount account = accountOpt.get();
 
             return this.database.getPlatform(platformId).thenCompose(platformOpt -> {
-                if (platformOpt.isEmpty()) return CompletableFuture.completedFuture("Error: Platform not found.");
+                if (platformOpt.isEmpty()) return CompletableFuture.completedFuture(new AIResponse("Error: Platform not found.", 0, 0, 0));
                 
                 AIPlatform platform = platformOpt.get();
                 Map<String, String> allCategories = this.manager.getAllCategories();
 
                 // Step 1: AI decides which categories to use based on the prompt
-                return aiClient.decideCategories(platform, modelId, account, prompt, allCategories).thenCompose(selectedCategories -> {
+                return aiClient.decideCategories(platform, modelId, account, prompt, allCategories).thenCompose(categoryResult -> {
                     List<AITool> filteredTools = new ArrayList<>();
+                    List<String> selectedCategories = categoryResult.data();
                     
                     if (selectedCategories != null && !selectedCategories.isEmpty()) {
                         for (AITool tool : this.manager.getAllRegisteredTools()) {
@@ -45,9 +46,18 @@ public class MCAIProvider {
                     }
 
                     // Step 2: AI decides which specific tools to call within the filtered list
-                    return aiClient.decideTools(platform, modelId, account, prompt, filteredTools).thenCompose(toolCalls -> {
+                    return aiClient.decideTools(platform, modelId, account, prompt, filteredTools).thenCompose(toolResult -> {
+                        List<ToolCall> toolCalls = toolResult.data();
+                        
                         if (toolCalls == null || toolCalls.isEmpty()) {
-                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, "No tools were used.");
+                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, "No tools were used.").thenApply(finalResponse -> 
+                                new AIResponse(
+                                    finalResponse.content(),
+                                    categoryResult.promptTokens() + toolResult.promptTokens() + finalResponse.promptTokens(),
+                                    categoryResult.completionTokens() + toolResult.completionTokens() + finalResponse.completionTokens(),
+                                    categoryResult.totalTokens() + toolResult.totalTokens() + finalResponse.totalTokens()
+                                )
+                            );
                         }
 
                         // Execute the chosen tools
@@ -58,11 +68,18 @@ public class MCAIProvider {
                             executionFutures.add(execution);
                         }
 
-                        // Step 3: Send tool results back to AI for final summary
+                        // Step 3: Send tool results back to AI for final summary and accumulate all tokens
                         return CompletableFuture.allOf(executionFutures.toArray(new CompletableFuture[0])).thenCompose(v -> {
                             StringBuilder sb = new StringBuilder();
                             for (CompletableFuture<String> f : executionFutures) sb.append(f.join());
-                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, sb.toString());
+                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, sb.toString()).thenApply(finalResponse -> 
+                                new AIResponse(
+                                    finalResponse.content(),
+                                    categoryResult.promptTokens() + toolResult.promptTokens() + finalResponse.promptTokens(),
+                                    categoryResult.completionTokens() + toolResult.completionTokens() + finalResponse.completionTokens(),
+                                    categoryResult.totalTokens() + toolResult.totalTokens() + finalResponse.totalTokens()
+                                )
+                            );
                         });
                     });
                 });
@@ -74,10 +91,14 @@ public class MCAIProvider {
     public CompletableFuture<List<AIModel>> getModels(int platformId) { return this.database.getModelsByPlatform(platformId); }
 
     public record ToolCall(String toolName, Map<String, Object> arguments) {}
+    
+    public record AIResponse(String content, int promptTokens, int completionTokens, int totalTokens) {}
+
+    public record AIWorkflowResult<T>(T data, int promptTokens, int completionTokens, int totalTokens) {}
 
     public interface IAIWorkflowClient {
-        CompletableFuture<List<String>> decideCategories(AIPlatform platform, String modelId, AIAccount account, String prompt, Map<String, String> categories);
-        CompletableFuture<List<ToolCall>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools);
-        CompletableFuture<String> generateFinalSummary(AIPlatform platform, String modelId, AIAccount account, String originalPrompt, String toolResults);
+        CompletableFuture<AIWorkflowResult<List<String>>> decideCategories(AIPlatform platform, String modelId, AIAccount account, String prompt, Map<String, String> categories);
+        CompletableFuture<AIWorkflowResult<List<ToolCall>>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools);
+        CompletableFuture<AIResponse> generateFinalSummary(AIPlatform platform, String modelId, AIAccount account, String originalPrompt, String toolResults);
     }
 }

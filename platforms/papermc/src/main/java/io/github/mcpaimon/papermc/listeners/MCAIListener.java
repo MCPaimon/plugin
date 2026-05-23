@@ -59,7 +59,13 @@ public class MCAIListener implements Listener {
 
                 this.provider.sendPrompt("player", player.getUniqueId().toString(), session.platformId(), session.modelId(), message, this.aiClient)
                     .thenAccept(response -> {
-                        player.sendMessage(Component.text("[AI]: ", NamedTextColor.LIGHT_PURPLE).append(Component.text(response, NamedTextColor.WHITE)));
+                        player.sendMessage(Component.text("[AI]: ", NamedTextColor.LIGHT_PURPLE).append(Component.text(response.content(), NamedTextColor.WHITE)));
+                        
+                        if (response.totalTokens() > 0) {
+                            String usageText = String.format("[Usage]: %d Tokens (Prompt: %d, Completion: %d)", 
+                                    response.totalTokens(), response.promptTokens(), response.completionTokens());
+                            player.sendMessage(Component.text(usageText, NamedTextColor.GRAY));
+                        }
                     })
                     .exceptionally(throwable -> {
                         player.sendMessage(Component.text("[System Error]: Failed to get response from AI. " + throwable.getMessage(), NamedTextColor.RED));

@@ -52,9 +52,9 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
     }
 
     @Override
-    public CompletableFuture<List<String>> decideCategories(AIPlatform platform, String modelId, AIAccount account, String prompt, Map<String, String> categories) {
+    public CompletableFuture<MCAIProvider.AIWorkflowResult<List<String>>> decideCategories(AIPlatform platform, String modelId, AIAccount account, String prompt, Map<String, String> categories) {
         if (categories == null || categories.isEmpty()) {
-            return CompletableFuture.completedFuture(Collections.emptyList());
+            return CompletableFuture.completedFuture(new MCAIProvider.AIWorkflowResult<>(Collections.emptyList(), 0, 0, 0));
         }
 
         return CompletableFuture.supplyAsync(() -> {
@@ -116,6 +116,15 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 }
 
                 JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+                
+                int promptTokens = 0, completionTokens = 0, totalTokens = 0;
+                if (jsonResponse.has("usage")) {
+                    JsonObject usage = jsonResponse.getAsJsonObject("usage");
+                    promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").getAsInt() : 0;
+                    completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").getAsInt() : 0;
+                    totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").getAsInt() : 0;
+                }
+
                 List<String> selectedCategories = new ArrayList<>();
 
                 if (jsonResponse.has("choices")) {
@@ -139,7 +148,7 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                         }
                     }
                 }
-                return selectedCategories;
+                return new MCAIProvider.AIWorkflowResult<>(selectedCategories, promptTokens, completionTokens, totalTokens);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to call AI to decide categories: " + e.getMessage(), e);
             }
@@ -147,7 +156,7 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
     }
 
     @Override
-    public CompletableFuture<List<MCAIProvider.ToolCall>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools) {
+    public CompletableFuture<MCAIProvider.AIWorkflowResult<List<MCAIProvider.ToolCall>>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 JsonObject requestBody = new JsonObject();
@@ -205,6 +214,15 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 }
 
                 JsonObject jsonResponse = parsedElement.getAsJsonObject();
+                
+                int promptTokens = 0, completionTokens = 0, totalTokens = 0;
+                if (jsonResponse.has("usage")) {
+                    JsonObject usage = jsonResponse.getAsJsonObject("usage");
+                    promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").getAsInt() : 0;
+                    completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").getAsInt() : 0;
+                    totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").getAsInt() : 0;
+                }
+
                 List<MCAIProvider.ToolCall> toolCallsList = new ArrayList<>();
                 
                 if (jsonResponse.has("choices")) {
@@ -229,7 +247,7 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                         }
                     }
                 }
-                return toolCallsList;
+                return new MCAIProvider.AIWorkflowResult<>(toolCallsList, promptTokens, completionTokens, totalTokens);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to call AI to decide tools: " + e.getMessage(), e);
             }
@@ -237,7 +255,7 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
     }
 
     @Override
-    public CompletableFuture<String> generateFinalSummary(AIPlatform platform, String modelId, AIAccount account, String originalPrompt, String toolResults) {
+    public CompletableFuture<MCAIProvider.AIResponse> generateFinalSummary(AIPlatform platform, String modelId, AIAccount account, String originalPrompt, String toolResults) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 JsonObject requestBody = new JsonObject();
@@ -269,31 +287,42 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
                 if (response.statusCode() >= 400) {
-                    return "API Error (HTTP " + response.statusCode() + "): " + response.body();
+                    return new MCAIProvider.AIResponse("API Error (HTTP " + response.statusCode() + "): " + response.body(), 0, 0, 0);
                 }
 
                 JsonElement parsedElement = JsonParser.parseString(response.body());
                 if (!parsedElement.isJsonObject()) {
-                    return "Error parsing AI response. Not a JSON object. Raw Response: " + response.body();
+                    return new MCAIProvider.AIResponse("Error parsing AI response. Not a JSON object. Raw Response: " + response.body(), 0, 0, 0);
                 }
 
                 JsonObject jsonResponse = parsedElement.getAsJsonObject();
+                
+                int promptTokens = 0;
+                int completionTokens = 0;
+                int totalTokens = 0;
+                
+                if (jsonResponse.has("usage")) {
+                    JsonObject usage = jsonResponse.getAsJsonObject("usage");
+                    promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").getAsInt() : 0;
+                    completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").getAsInt() : 0;
+                    totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").getAsInt() : 0;
+                }
 
                 if (jsonResponse.has("choices")) {
                     JsonArray choices = jsonResponse.getAsJsonArray("choices");
                     if (!choices.isEmpty() && choices.get(0).isJsonObject()) {
                         JsonObject messageObj = choices.get(0).getAsJsonObject().getAsJsonObject("message");
                         if (messageObj != null && messageObj.has("content") && !messageObj.get("content").isJsonNull()) {
-                            return messageObj.get("content").getAsString();
+                            return new MCAIProvider.AIResponse(messageObj.get("content").getAsString(), promptTokens, completionTokens, totalTokens);
                         }
                     }
                 }
                 
                 if (jsonResponse.has("error")) {
-                    return "API Error: " + jsonResponse.getAsJsonObject("error").get("message").getAsString();
+                    return new MCAIProvider.AIResponse("API Error: " + jsonResponse.getAsJsonObject("error").get("message").getAsString(), 0, 0, 0);
                 }
                 
-                return "Error: Unexpected response format from AI. Raw: " + response.body();
+                return new MCAIProvider.AIResponse("Error: Unexpected response format from AI. Raw: " + response.body(), 0, 0, 0);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to generate final summary: " + e.getMessage(), e);
             }
