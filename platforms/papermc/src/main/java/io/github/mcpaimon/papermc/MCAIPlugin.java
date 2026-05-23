@@ -66,6 +66,12 @@ public class MCAIPlugin extends JavaPlugin {
         // Wait for database tables to be created
         this.manager.initialize().join();
 
+        // Register Categories
+        logger.info("Registering AI tool categories...");
+        this.manager.createCategory("account_management", "Tools for managing user API tokens and accounts.");
+        this.manager.createCategory("system_management", "Tools for managing the AI plugin system, platforms, and models.");
+        this.manager.createCategory("admin", "Administrative tools that require operator (OP) permissions.");
+
         // Register Core Tools
         logger.info("Registering core AI tools...");
         this.manager.registerTool(new ChangeTokenTool());

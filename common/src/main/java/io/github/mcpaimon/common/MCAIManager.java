@@ -9,6 +9,7 @@ import java.util.concurrent.*;
 public class MCAIManager {
     private final IAIDatabase database;
     private final Map<String, AITool> registeredTools = new ConcurrentHashMap<>();
+    private final Map<String, String> registeredCategories = new ConcurrentHashMap<>();
 
     public MCAIManager(IAIDatabase database) {
         this.database = database;
@@ -42,6 +43,14 @@ public class MCAIManager {
      */
     public CompletableFuture<List<AIPlatform>> getAllPlatforms() {
         return this.database.getAllPlatforms();
+    }
+
+    public void createCategory(String categoryId, String description) {
+        this.registeredCategories.put(categoryId, description);
+    }
+
+    public Map<String, String> getAllCategories() {
+        return new HashMap<>(this.registeredCategories);
     }
 
     public void registerTool(AITool tool) { this.registeredTools.put(tool.getName(), tool); }

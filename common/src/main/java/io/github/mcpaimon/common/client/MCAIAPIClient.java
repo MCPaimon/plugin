@@ -17,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -40,7 +41,6 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
      */
     private String formatUrl(String url) {
         if (url == null || url.isBlank()) return url;
-        // If the URL does not end with completions endpoint, append it automatically
         if (!url.endsWith("/chat/completions") && !url.endsWith("/v1/completions")) {
             if (url.endsWith("/")) {
                 return url + "chat/completions";
@@ -52,6 +52,101 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
     }
 
     @Override
+    public CompletableFuture<List<String>> decideCategories(AIPlatform platform, String modelId, AIAccount account, String prompt, Map<String, String> categories) {
+        if (categories == null || categories.isEmpty()) {
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                JsonObject requestBody = new JsonObject();
+                requestBody.addProperty("model", modelId);
+
+                JsonArray messages = new JsonArray();
+                JsonObject systemMsg = new JsonObject();
+                systemMsg.addProperty("role", "system");
+                systemMsg.addProperty("content", "You are an AI assistant. Your task is to review the user prompt and the available tool categories, then select the relevant category IDs to handle the user's request. You MUST use the 'select_categories' tool.");
+                messages.add(systemMsg);
+
+                JsonObject userMsg = new JsonObject();
+                userMsg.addProperty("role", "user");
+                StringBuilder contentBuilder = new StringBuilder("Available Categories:\n");
+                categories.forEach((id, desc) -> contentBuilder.append("- ").append(id).append(": ").append(desc).append("\n"));
+                contentBuilder.append("\nUser Prompt: ").append(prompt);
+                userMsg.addProperty("content", contentBuilder.toString());
+                messages.add(userMsg);
+
+                requestBody.add("messages", messages);
+
+                // Inject a forced tool call to guarantee strict JSON array output
+                JsonArray toolsArray = new JsonArray();
+                JsonObject toolObj = new JsonObject();
+                toolObj.addProperty("type", "function");
+                
+                JsonObject functionObj = new JsonObject();
+                functionObj.addProperty("name", "select_categories");
+                functionObj.addProperty("description", "Selects the appropriate categories needed.");
+                functionObj.add("parameters", JsonParser.parseString("{ \"type\": \"object\", \"properties\": { \"categories\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } } }, \"required\": [\"categories\"] }"));
+                toolObj.add("function", functionObj);
+                toolsArray.add(toolObj);
+
+                requestBody.add("tools", toolsArray);
+
+                // Force the AI to use the specific tool
+                JsonObject toolChoice = new JsonObject();
+                toolChoice.addProperty("type", "function");
+                JsonObject toolChoiceFunc = new JsonObject();
+                toolChoiceFunc.addProperty("name", "select_categories");
+                toolChoice.add("function", toolChoiceFunc);
+                requestBody.add("tool_choice", toolChoice);
+
+                String targetUrl = formatUrl(platform.url());
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(targetUrl))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + account.token())
+                        .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(requestBody), StandardCharsets.UTF_8))
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() >= 400) {
+                    throw new RuntimeException("HTTP Error " + response.statusCode() + " | Raw Response: " + response.body());
+                }
+
+                JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+                List<String> selectedCategories = new ArrayList<>();
+
+                if (jsonResponse.has("choices")) {
+                    JsonArray choices = jsonResponse.getAsJsonArray("choices");
+                    if (!choices.isEmpty() && choices.get(0).isJsonObject()) {
+                        JsonObject messageObj = choices.get(0).getAsJsonObject().getAsJsonObject("message");
+                        if (messageObj != null && messageObj.has("tool_calls") && !messageObj.get("tool_calls").isJsonNull()) {
+                            JsonArray toolCalls = messageObj.getAsJsonArray("tool_calls");
+                            for (JsonElement callElement : toolCalls) {
+                                JsonObject functionCall = callElement.getAsJsonObject().getAsJsonObject("function");
+                                if ("select_categories".equals(functionCall.get("name").getAsString())) {
+                                    String argumentsStr = functionCall.get("arguments").getAsString();
+                                    JsonObject argsObj = JsonParser.parseString(argumentsStr).getAsJsonObject();
+                                    if (argsObj.has("categories") && argsObj.get("categories").isJsonArray()) {
+                                        for (JsonElement catElem : argsObj.getAsJsonArray("categories")) {
+                                            selectedCategories.add(catElem.getAsString());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return selectedCategories;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to call AI to decide categories: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    @Override
     public CompletableFuture<List<MCAIProvider.ToolCall>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools) {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -60,7 +155,6 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
 
                 JsonArray messages = new JsonArray();
                 
-                // Add System Context (Strict Multi-tool capability)
                 JsonObject systemMsg = new JsonObject();
                 systemMsg.addProperty("role", "system");
                 systemMsg.addProperty("content", "You are a Minecraft AI assistant. CRITICAL INSTRUCTION: If the user asks for multiple distinct pieces of information (e.g., name AND UUID, or date AND time), you MUST invoke ALL necessary tools simultaneously in parallel. Do not wait for one tool's response to call another.");
@@ -72,7 +166,6 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 messages.add(userMsg);
                 requestBody.add("messages", messages);
 
-                // Inject tools into the request if available
                 if (tools != null && !tools.isEmpty()) {
                     JsonArray toolsArray = new JsonArray();
                     for (AITool tool : tools) {
@@ -88,7 +181,7 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                         toolsArray.add(toolObj);
                     }
                     requestBody.add("tools", toolsArray);
-                    requestBody.addProperty("tool_choice", "auto"); // Let AI decide
+                    requestBody.addProperty("tool_choice", "auto");
                 }
 
                 String targetUrl = formatUrl(platform.url());
@@ -102,7 +195,6 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
 
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                // HTTP Error Checking
                 if (response.statusCode() >= 400) {
                     throw new RuntimeException("HTTP Error " + response.statusCode() + " | Raw Response: " + response.body());
                 }
@@ -115,13 +207,11 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                 JsonObject jsonResponse = parsedElement.getAsJsonObject();
                 List<MCAIProvider.ToolCall> toolCallsList = new ArrayList<>();
                 
-                // Parse AI response for tool calls
                 if (jsonResponse.has("choices")) {
                     JsonArray choices = jsonResponse.getAsJsonArray("choices");
                     if (!choices.isEmpty() && choices.get(0).isJsonObject()) {
                         JsonObject messageObj = choices.get(0).getAsJsonObject().getAsJsonObject("message");
                         
-                        // Verify if tool_calls exist and is not null
                         if (messageObj != null && messageObj.has("tool_calls") && !messageObj.get("tool_calls").isJsonNull()) {
                             JsonArray toolCalls = messageObj.getAsJsonArray("tool_calls");
                             for (JsonElement callElement : toolCalls) {
@@ -129,7 +219,6 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
                                 String name = functionCall.get("name").getAsString();
                                 String argumentsStr = functionCall.get("arguments").getAsString();
                                 
-                                // Handle missing or empty arguments by defaulting to empty JSON object
                                 if (argumentsStr == null || argumentsStr.isBlank()) {
                                     argumentsStr = "{}";
                                 }
@@ -179,7 +268,6 @@ public class MCAIAPIClient implements MCAIProvider.IAIWorkflowClient {
 
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                // HTTP Error Checking
                 if (response.statusCode() >= 400) {
                     return "API Error (HTTP " + response.statusCode() + "): " + response.body();
                 }
