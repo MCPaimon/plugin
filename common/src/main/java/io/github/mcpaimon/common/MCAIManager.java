@@ -140,10 +140,20 @@ public class MCAIManager {
 
     /**
      * Registers a new AI tool.
+     * Prevents duplicate registration and prints a warning message if the tool name already exists.
      *
      * @param tool The AITool instance to be registered.
      */
-    public void registerTool(AITool tool) { this.registeredTools.put(tool.getName(), tool); }
+    public void registerTool(AITool tool) {
+        String toolName = tool.getName();
+        
+        if (this.registeredTools.containsKey(toolName)) {
+            System.out.println("[MCAI Warning] Registration skipped: tool '" + toolName + "' is already registered.");
+            return;
+        }
+        
+        this.registeredTools.put(toolName, tool); 
+    }
 
     /**
      * Retrieves all registered AI tools.
