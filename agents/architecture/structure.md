@@ -1,6 +1,6 @@
 # Architecture & Technical Standards
 
-## MCPaimon Project Structure
+## Project Structure
 
 Maintain the sub-module architecture:
 
