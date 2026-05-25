@@ -1,20 +1,20 @@
 package io.github.mcpaimon.api.provider;
 
-import io.github.mcpaimon.api.model.AIAccount;
-import java.util.concurrent.CompletableFuture;
-
 /**
- * Interface for providing AI account information from different sources (Player, Console, Clans, etc.).
+ * Interface for providing AI account information dynamically from different sources (Player, Console, Clans, etc.).
+ * Implement this in different plugins to easily interact with MCAI.
  */
 public interface IAIAccountProvider {
+    
     /**
-     * Retrieves the account associated with the sender.
-     * @return A future containing the account information.
+     * Gets the account type (e.g., "player", "console", "clan").
+     * * @return The account type string.
      */
-    CompletableFuture<AIAccount> getAccount();
+    String getAccountType();
 
     /**
-     * Gets the identifier string for this provider type (e.g., "player", "console").
+     * Gets the unique identifier for this account type.
+     * * @return The account UUID string.
      */
-    String getProviderType();
+    String getAccountUuid();
 }
