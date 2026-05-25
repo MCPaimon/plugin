@@ -67,7 +67,7 @@ public class MCAISQLite implements IAIDatabase {
         return CompletableFuture.runAsync(() -> {
             try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
                 stmt.execute("PRAGMA foreign_keys = ON;");
-                stmt.execute("CREATE TABLE IF NOT EXISTS ai_platforms (id INTEGER PRIMARY KEY AUTOINCREMENT, display_name TEXT NOT NULL, url TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+                stmt.execute("CREATE TABLE IF NOT EXISTS ai_platforms (id INTEGER PRIMARY KEY AUTOINCREMENT, display_name TEXT NOT NULL UNIQUE, url TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
                 stmt.execute("CREATE TABLE IF NOT EXISTS ai_models (platform_id INTEGER NOT NULL, model_id TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (platform_id, model_id), FOREIGN KEY (platform_id) REFERENCES ai_platforms(id) ON DELETE CASCADE)");
                 stmt.execute("CREATE TABLE IF NOT EXISTS ai_accounts (account_type TEXT NOT NULL, account_uuid TEXT NOT NULL, platform_id INTEGER NOT NULL, token TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (account_type, account_uuid, platform_id), FOREIGN KEY (platform_id) REFERENCES ai_platforms(id) ON DELETE CASCADE)");
                 stmt.execute("CREATE TABLE IF NOT EXISTS ai_log (id INTEGER PRIMARY KEY AUTOINCREMENT, account_type TEXT NOT NULL, account_uuid TEXT NOT NULL, platform_id INTEGER NOT NULL, model_id TEXT NOT NULL, chat_history TEXT NOT NULL, token_total_usage INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (account_type, account_uuid, platform_id) REFERENCES ai_accounts(account_type, account_uuid, platform_id) ON DELETE RESTRICT, FOREIGN KEY (platform_id, model_id) REFERENCES ai_models(platform_id, model_id) ON DELETE RESTRICT)");
@@ -102,7 +102,6 @@ public class MCAISQLite implements IAIDatabase {
             } catch (SQLException e) { 
                 throw new RuntimeException(e); 
             }
-            // Execute join outside of try-with-resources to prevent pool deadlock
             return getPlatform(generatedId).join().orElseThrow();
         });
     }

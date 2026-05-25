@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to create and register a new AI model for a specific platform.
- * Logic: Requires OP status to execute.
+ * Logic: Requires OP status to execute. Prevents creating duplicate models on the same platform.
  */
 public class CreateModel implements AITool {
 
@@ -67,7 +67,8 @@ public class CreateModel implements AITool {
             return CompletableFuture.completedFuture("Error: Both 'platformName' and 'modelId' must be provided.");
         }
 
-        MCAIManager manager = JavaPlugin.getPlugin(MCAIPlugin.class).getManager();
+        MCAIPlugin plugin = JavaPlugin.getPlugin(MCAIPlugin.class);
+        MCAIManager manager = plugin.getManager();
 
         return manager.getAllPlatforms().thenCompose(platforms -> {
             Optional<AIPlatform> targetOpt = platforms.stream()
@@ -80,9 +81,20 @@ public class CreateModel implements AITool {
 
             AIPlatform platform = targetOpt.get();
 
-            return manager.registerModel(platform.id(), modelId)
-                    .thenApply(model -> "Success: Registered model '" + model.modelId() + "' under platform '" + platform.displayName() + "'.")
-                    .exceptionally(throwable -> "Error: Failed to register model. " + throwable.getMessage());
+            // Check if model already exists on this platform
+            return plugin.getProvider().getModels(platform.id()).thenCompose(existingModels -> {
+                boolean modelExists = existingModels.stream()
+                        .anyMatch(m -> m.modelId().equalsIgnoreCase(modelId));
+
+                if (modelExists) {
+                    return CompletableFuture.completedFuture("Error: Model '" + modelId + "' already exists under platform '" + platformName + "'.");
+                }
+
+                // If not exists, proceed to register
+                return manager.registerModel(platform.id(), modelId)
+                        .thenApply(model -> "Success: Registered model '" + model.modelId() + "' under platform '" + platform.displayName() + "'.")
+                        .exceptionally(throwable -> "Error: Failed to register model. " + throwable.getMessage());
+            });
         });
     }
 }

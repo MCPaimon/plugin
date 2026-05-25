@@ -15,7 +15,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to create and register a new AI platform.
- * Logic: Requires OP status to execute.
+ * Logic: Requires OP status to execute. Prevents creating duplicates.
  */
 public class CreatePlatform implements AITool {
 
@@ -67,8 +67,15 @@ public class CreatePlatform implements AITool {
 
         MCAIManager manager = JavaPlugin.getPlugin(MCAIPlugin.class).getManager();
 
-        return manager.registerPlatform(displayName, url)
-                .thenApply(platform -> "Success: Registered new platform '" + platform.displayName() + "' with ID: " + platform.id())
-                .exceptionally(throwable -> "Error: Failed to register platform. " + throwable.getMessage());
+        return manager.getAllPlatforms().thenCompose(platforms -> {
+            boolean exists = platforms.stream().anyMatch(p -> p.displayName().equalsIgnoreCase(displayName));
+            if (exists) {
+                return CompletableFuture.completedFuture("Error: Platform '" + displayName + "' already exists.");
+            }
+
+            return manager.registerPlatform(displayName, url)
+                    .thenApply(platform -> "Success: Registered new platform '" + platform.displayName() + "' with ID: " + platform.id())
+                    .exceptionally(throwable -> "Error: Failed to register platform. " + throwable.getMessage());
+        });
     }
 }
