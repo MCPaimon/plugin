@@ -75,7 +75,8 @@ public class MCAIPlugin extends JavaPlugin {
             database = new MCAISQLite(new File(getDataFolder(), getConfig().getString("database.sqlite.file", "mcai.db")));
         }
 
-        this.manager = new MCAIManager(database);
+        String secretKey = getConfig().getString("token.secret", "secretkey");
+        this.manager = new MCAIManager(database, secretKey);
         this.provider = new MCAIProvider(this.manager, database);
 
         // Register Categories
