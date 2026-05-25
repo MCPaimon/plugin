@@ -77,7 +77,10 @@ public class MCAIPlugin extends JavaPlugin {
 
         String secretKey = getConfig().getString("token.secret", "secretkey");
         this.manager = new MCAIManager(database, secretKey);
-        this.provider = new MCAIProvider(this.manager, database);
+
+        // Retrieve max_workflow_iterations from config, defaulting to 5
+        int maxWorkflowIterations = getConfig().getInt("max_workflow_iterations", 5);
+        this.provider = new MCAIProvider(this.manager, database, maxWorkflowIterations);
 
         // Register Categories
         logger.info("Registering AI tool categories...");

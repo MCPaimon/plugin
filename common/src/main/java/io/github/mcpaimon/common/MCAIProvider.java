@@ -16,6 +16,11 @@ public class MCAIProvider {
      * The default account type used if none is specified.
      */
     private static final String DEFAULT_ACCOUNT_TYPE = "player";
+
+    /**
+     * The maximum number of tool execution iterations allowed per prompt to prevent infinite loops.
+     */
+    private final int maxWorkflowIterations;
     
     /**
      * The central manager for accounts, tools, and sessions.
@@ -30,12 +35,14 @@ public class MCAIProvider {
     /**
      * Constructs a new MCAIProvider instance.
      *
-     * @param manager  The manager handling core AI features.
-     * @param database The database implementation.
+     * @param manager               The manager handling core AI features.
+     * @param database              The database implementation.
+     * @param maxWorkflowIterations The maximum number of tool iterations to prevent infinite loops.
      */
-    public MCAIProvider(MCAIManager manager, IAIDatabase database) {
+    public MCAIProvider(MCAIManager manager, IAIDatabase database, int maxWorkflowIterations) {
         this.manager = manager;
         this.database = database;
+        this.maxWorkflowIterations = maxWorkflowIterations;
     }
 
     /**
@@ -94,73 +101,106 @@ public class MCAIProvider {
                 if (platformOpt.isEmpty()) return CompletableFuture.completedFuture(new AIResponse("Error: Platform not found.", 0, 0, 0));
                 
                 AIPlatform platform = platformOpt.get();
-                Map<String, String> allCategories = this.manager.getAllCategories();
+                
+                // Start the multi-step execution loop
+                return executeWorkflowLoop(platform, modelId, account, prompt, "", 0, aiClient, preSummaryInterceptor, 0, 0, 0);
+            });
+        });
+    }
 
-                // Step 1: AI decides which categories to use based on the prompt
-                return aiClient.decideCategories(platform, modelId, account, prompt, allCategories).thenCompose(categoryResult -> {
-                    List<AITool> filteredTools = new ArrayList<>();
-                    List<String> selectedCategories = categoryResult.data();
-                    
-                    if (selectedCategories != null && !selectedCategories.isEmpty()) {
-                        for (AITool tool : this.manager.getAllRegisteredTools()) {
-                            boolean hasMatchingCategory = tool.getCategories().stream().anyMatch(selectedCategories::contains);
-                            if (hasMatchingCategory) {
-                                filteredTools.add(tool);
-                            }
-                        }
+    /**
+     * Recursively handles the multi-step workflow allowing the AI to autonomously decide when to stop calling tools.
+     */
+    private CompletableFuture<AIResponse> executeWorkflowLoop(
+            AIPlatform platform, String modelId, AIAccount account, String originalPrompt, 
+            String accumulatedToolResults, int currentIteration, IAIWorkflowClient aiClient, 
+            BiFunction<AIAccount, String, String> preSummaryInterceptor, 
+            int accumulatedPromptTokens, int accumulatedCompletionTokens, int accumulatedTotalTokens) {
+
+        // Force termination if the iteration limit is reached to prevent infinite loops
+        if (currentIteration >= this.maxWorkflowIterations) {
+            return finalizeWorkflow(platform, modelId, account, originalPrompt, accumulatedToolResults, aiClient, preSummaryInterceptor, accumulatedPromptTokens, accumulatedCompletionTokens, accumulatedTotalTokens);
+        }
+
+        // Provide context to the AI so it knows what has already been executed
+        String decisionPrompt = originalPrompt;
+        if (!accumulatedToolResults.isEmpty()) {
+            decisionPrompt = originalPrompt + "\n\n--- Context from previous tool actions ---\n" + accumulatedToolResults + "\n-----------------------------------\nBased on the results above, do you need to execute more tools to fully answer the original prompt? If the information is sufficient, return an empty tool call list.";
+        }
+        
+        final String finalDecisionPrompt = decisionPrompt;
+        
+        // Step 1: AI decides which categories to use based on current context
+        return aiClient.decideCategories(platform, modelId, account, finalDecisionPrompt, this.manager.getAllCategories()).thenCompose(categoryResult -> {
+            List<AITool> filteredTools = new ArrayList<>();
+            List<String> selectedCategories = categoryResult.data();
+            
+            if (selectedCategories != null && !selectedCategories.isEmpty()) {
+                for (AITool tool : this.manager.getAllRegisteredTools()) {
+                    boolean hasMatchingCategory = tool.getCategories().stream().anyMatch(selectedCategories::contains);
+                    if (hasMatchingCategory) {
+                        filteredTools.add(tool);
                     }
+                }
+            }
 
-                    // Step 2: AI decides which specific tools to call within the filtered list
-                    return aiClient.decideTools(platform, modelId, account, prompt, filteredTools).thenCompose(toolResult -> {
-                        List<ToolCall> toolCalls = toolResult.data();
-                        
-                        if (toolCalls == null || toolCalls.isEmpty()) {
-                            String finalToolResults = "No tools were used.";
-                            if (preSummaryInterceptor != null) {
-                                finalToolResults = preSummaryInterceptor.apply(account, finalToolResults);
-                            }
-                            
-                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, finalToolResults).thenApply(finalResponse -> 
-                                new AIResponse(
-                                    finalResponse.content(),
-                                    categoryResult.promptTokens() + toolResult.promptTokens() + finalResponse.promptTokens(),
-                                    categoryResult.completionTokens() + toolResult.completionTokens() + finalResponse.completionTokens(),
-                                    categoryResult.totalTokens() + toolResult.totalTokens() + finalResponse.totalTokens()
-                                )
-                            );
-                        }
+            // Step 2: AI decides which specific tools to call
+            return aiClient.decideTools(platform, modelId, account, finalDecisionPrompt, filteredTools).thenCompose(toolResult -> {
+                List<ToolCall> toolCalls = toolResult.data();
+                
+                int newPromptTokens = accumulatedPromptTokens + categoryResult.promptTokens() + toolResult.promptTokens();
+                int newCompletionTokens = accumulatedCompletionTokens + categoryResult.completionTokens() + toolResult.completionTokens();
+                int newTotalTokens = accumulatedTotalTokens + categoryResult.totalTokens() + toolResult.totalTokens();
+                
+                // Trigger condition: AI decides to stop by not calling any tools
+                if (toolCalls == null || toolCalls.isEmpty()) {
+                    String finalResults = accumulatedToolResults.isEmpty() ? "No tools were used." : accumulatedToolResults;
+                    return finalizeWorkflow(platform, modelId, account, originalPrompt, finalResults, aiClient, preSummaryInterceptor, newPromptTokens, newCompletionTokens, newTotalTokens);
+                }
 
-                        // Execute the chosen tools
-                        List<CompletableFuture<String>> executionFutures = new ArrayList<>();
-                        for (ToolCall call : toolCalls) {
-                            CompletableFuture<String> execution = this.manager.executeToolCall(call.toolName(), call.arguments(), account)
-                                    .thenApply(result -> "Tool '" + call.toolName() + "' Result:\n" + result + "\n");
-                            executionFutures.add(execution);
-                        }
+                // Execute the chosen tools
+                List<CompletableFuture<String>> executionFutures = new ArrayList<>();
+                for (ToolCall call : toolCalls) {
+                    CompletableFuture<String> execution = this.manager.executeToolCall(call.toolName(), call.arguments(), account)
+                            .thenApply(result -> "Step " + (currentIteration + 1) + " - Tool '" + call.toolName() + "' Result:\n" + result + "\n");
+                    executionFutures.add(execution);
+                }
 
-                        // Step 3: Send tool results back to AI for final summary and accumulate all tokens
-                        return CompletableFuture.allOf(executionFutures.toArray(new CompletableFuture[0])).thenCompose(v -> {
-                            StringBuilder sb = new StringBuilder();
-                            for (CompletableFuture<String> f : executionFutures) sb.append(f.join());
-                            
-                            String finalToolResults = sb.toString();
-                            if (preSummaryInterceptor != null) {
-                                finalToolResults = preSummaryInterceptor.apply(account, finalToolResults);
-                            }
-                            
-                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, finalToolResults).thenApply(finalResponse -> 
-                                new AIResponse(
-                                    finalResponse.content(),
-                                    categoryResult.promptTokens() + toolResult.promptTokens() + finalResponse.promptTokens(),
-                                    categoryResult.completionTokens() + toolResult.completionTokens() + finalResponse.completionTokens(),
-                                    categoryResult.totalTokens() + toolResult.totalTokens() + finalResponse.totalTokens()
-                                )
-                            );
-                        });
-                    });
+                // Step 3: Wait for all tools to finish, accumulate results, and loop
+                return CompletableFuture.allOf(executionFutures.toArray(new CompletableFuture[0])).thenCompose(v -> {
+                    StringBuilder newResults = new StringBuilder(accumulatedToolResults);
+                    for (CompletableFuture<String> f : executionFutures) {
+                        newResults.append(f.join());
+                    }
+                    
+                    // Recursive call for the next iteration
+                    return executeWorkflowLoop(platform, modelId, account, originalPrompt, newResults.toString(), currentIteration + 1, aiClient, preSummaryInterceptor, newPromptTokens, newCompletionTokens, newTotalTokens);
                 });
             });
         });
+    }
+
+    /**
+     * Handles the final summary generation process once the workflow loop completes.
+     */
+    private CompletableFuture<AIResponse> finalizeWorkflow(
+            AIPlatform platform, String modelId, AIAccount account, String originalPrompt, 
+            String toolResults, IAIWorkflowClient aiClient, BiFunction<AIAccount, String, String> preSummaryInterceptor,
+            int promptTokens, int completionTokens, int totalTokens) {
+        
+        String finalToolResults = toolResults;
+        if (preSummaryInterceptor != null) {
+            finalToolResults = preSummaryInterceptor.apply(account, finalToolResults);
+        }
+        
+        return aiClient.generateFinalSummary(platform, modelId, account, originalPrompt, finalToolResults).thenApply(finalResponse -> 
+            new AIResponse(
+                finalResponse.content(),
+                promptTokens + finalResponse.promptTokens(),
+                completionTokens + finalResponse.completionTokens(),
+                totalTokens + finalResponse.totalTokens()
+            )
+        );
     }
 
     /**

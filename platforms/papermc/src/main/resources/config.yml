@@ -5,6 +5,9 @@ license: "free"
 token:
   secret: "secretkey"
 
+# Maximum number of tool iterations per prompt to prevent infinite loops
+max_workflow_iterations: 5
+
 database:
   type: "sqlite"
   sqlite:
