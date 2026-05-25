@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to delete tokens (sets to empty string).
- * Logic: Fully dynamic. Safely deletes the token exclusively for the AIAccount that initiated the workflow.
+ * Logic: Fully dynamic. Safely deletes the token exclusively for the target AIAccount.
  */
 public class DeleteTokenTool implements AITool {
 
@@ -24,11 +24,18 @@ public class DeleteTokenTool implements AITool {
     public String getName() { return "delete_token"; }
 
     @Override
-    public String getDescription() { return "Deletes (resets) the AI token for the current interacting account. Provide 'platformName' (e.g., openai) to delete it for a specific platform."; }
+    public String getDescription() { return "Deletes (resets) the AI token for the account. Provide 'platformName' (e.g., openai) to delete it for a specific platform. Can optionally specify 'targetAccountType' and 'targetAccountUuid' to delete for another entity like a clan."; }
 
     @Override
     public String getParametersJsonSchema() {
-        return "{ \"type\": \"object\", \"properties\": { \"platformName\": { \"type\": \"string\", \"description\": \"The name of the platform\" } } }";
+        return "{"
+                + "  \"type\": \"object\","
+                + "  \"properties\": {"
+                + "    \"platformName\": { \"type\": \"string\", \"description\": \"The name of the platform\" },"
+                + "    \"targetAccountType\": { \"type\": \"string\", \"description\": \"Optional. The account type to modify (e.g., player, console, clan).\" },"
+                + "    \"targetAccountUuid\": { \"type\": \"string\", \"description\": \"Optional. The UUID of the target account.\" }"
+                + "  }"
+                + "}";
     }
 
     @Override
@@ -39,8 +46,10 @@ public class DeleteTokenTool implements AITool {
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
         String platformName = (String) arguments.get("platformName");
+        String targetType = arguments.containsKey("targetAccountType") && arguments.get("targetAccountType") != null ? (String) arguments.get("targetAccountType") : account.accountType();
+        String targetUuid = arguments.containsKey("targetAccountUuid") && arguments.get("targetAccountUuid") != null ? (String) arguments.get("targetAccountUuid") : account.accountUuid();
 
-        DeleteTokenEvent event = new DeleteTokenEvent(account, platformName);
+        DeleteTokenEvent event = new DeleteTokenEvent(account, targetType, targetUuid, platformName);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
             return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
@@ -60,13 +69,13 @@ public class DeleteTokenTool implements AITool {
 
                 int pId = targetOpt.get().id();
 
-                return manager.setupAccount(account.accountType(), account.accountUuid(), pId, "")
-                        .thenApply(updatedAccount -> "Success. The token for '" + platformName + "' has been deleted for account type [" + account.accountType() + "].");
+                return manager.setupAccount(targetType, targetUuid, pId, "")
+                        .thenApply(updatedAccount -> "Success. The token for '" + platformName + "' has been deleted for account type [" + targetType + "].");
             });
         }
 
         // Reset token to empty string to effectively "delete" it
-        return manager.setupAccount(account.accountType(), account.accountUuid(), account.platformId(), "")
-                .thenApply(updatedAccount -> "Success. The token for the active session has been deleted for account type [" + account.accountType() + "].");
+        return manager.setupAccount(targetType, targetUuid, account.platformId(), "")
+                .thenApply(updatedAccount -> "Success. The token for the active session has been deleted for account type [" + targetType + "].");
     }
 }

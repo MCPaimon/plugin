@@ -1,12 +1,14 @@
 package io.github.mcpaimon.papermc.listeners;
 
 import io.github.mcpaimon.api.model.AIActiveSession;
+import io.github.mcpaimon.bukkit.event.PreGenerateSummaryEvent;
 import io.github.mcpaimon.common.MCAIProvider;
 import io.github.mcpaimon.papermc.MCAIPlugin;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -57,20 +59,23 @@ public class MCAIListener implements Listener {
                 
                 AIActiveSession session = sessionOpt.get();
 
-                this.provider.sendPrompt("player", player.getUniqueId().toString(), session.platformId(), session.modelId(), message, this.aiClient)
-                    .thenAccept(response -> {
-                        player.sendMessage(Component.text("[AI]: ", NamedTextColor.LIGHT_PURPLE).append(Component.text(response.content(), NamedTextColor.WHITE)));
-                        
-                        if (response.totalTokens() > 0) {
-                            String usageText = String.format("[Usage]: %d Tokens (Prompt: %d, Completion: %d)", 
-                                    response.totalTokens(), response.promptTokens(), response.completionTokens());
-                            player.sendMessage(Component.text(usageText, NamedTextColor.GRAY));
-                        }
-                    })
-                    .exceptionally(throwable -> {
-                        player.sendMessage(Component.text("[System Error]: Failed to get response from AI. " + throwable.getMessage(), NamedTextColor.RED));
-                        return null;
-                    });
+                this.provider.sendPrompt("player", player.getUniqueId().toString(), session.platformId(), session.modelId(), message, this.aiClient, (acc, results) -> {
+                    // Fire Bukkit event to allow modifications to tool results
+                    PreGenerateSummaryEvent preEvent = new PreGenerateSummaryEvent(acc, message, results);
+                    Bukkit.getPluginManager().callEvent(preEvent);
+                    return preEvent.getToolResults();
+                }).thenAccept(response -> {
+                    player.sendMessage(Component.text("[AI]: ", NamedTextColor.LIGHT_PURPLE).append(Component.text(response.content(), NamedTextColor.WHITE)));
+                    
+                    if (response.totalTokens() > 0) {
+                        String usageText = String.format("[Usage]: %d Tokens (Prompt: %d, Completion: %d)", 
+                                response.totalTokens(), response.promptTokens(), response.completionTokens());
+                        player.sendMessage(Component.text(usageText, NamedTextColor.GRAY));
+                    }
+                }).exceptionally(throwable -> {
+                    player.sendMessage(Component.text("[System Error]: Failed to get response from AI. " + throwable.getMessage(), NamedTextColor.RED));
+                    return null;
+                });
             });
         }
     }

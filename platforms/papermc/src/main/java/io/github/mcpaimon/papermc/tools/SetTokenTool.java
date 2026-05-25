@@ -3,7 +3,7 @@ package io.github.mcpaimon.papermc.tools;
 import io.github.mcpaimon.api.model.AIAccount;
 import io.github.mcpaimon.api.model.AIPlatform;
 import io.github.mcpaimon.api.tools.AITool;
-import io.github.mcpaimon.bukkit.event.ChangeTokenEvent;
+import io.github.mcpaimon.bukkit.event.SetTokenEvent;
 import io.github.mcpaimon.common.MCAIManager;
 import io.github.mcpaimon.papermc.MCAIPlugin;
 import org.bukkit.Bukkit;
@@ -15,17 +15,16 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Tool to change tokens.
- * Logic: Fully dynamic. It applies changes strictly to the target AIAccount,
- * making it perfectly safe for players, consoles, clans, or other custom account types.
+ * Tool to set tokens.
+ * Logic: Fully dynamic. Safely sets the token exclusively for the target AIAccount.
  */
-public class ChangeTokenTool implements AITool {
+public class SetTokenTool implements AITool {
 
     @Override
-    public String getName() { return "change_token"; }
+    public String getName() { return "set_token"; }
 
     @Override
-    public String getDescription() { return "Changes the AI token for the account. Provide 'platformName' (e.g., openai) to change it for a specific platform. Can optionally specify 'targetAccountType' and 'targetAccountUuid' to change for another entity like a clan."; }
+    public String getDescription() { return "Sets the AI token for the account. Provide 'platformName' (e.g., openai) to set it for a specific platform. Can optionally specify 'targetAccountType' and 'targetAccountUuid' to set for another entity like a clan."; }
 
     @Override
     public String getParametersJsonSchema() {
@@ -33,11 +32,11 @@ public class ChangeTokenTool implements AITool {
                 + "  \"type\": \"object\","
                 + "  \"properties\": {"
                 + "    \"platformName\": { \"type\": \"string\", \"description\": \"The name of the platform\" },"
-                + "    \"newToken\": { \"type\": \"string\" },"
+                + "    \"token\": { \"type\": \"string\" },"
                 + "    \"targetAccountType\": { \"type\": \"string\", \"description\": \"Optional. The account type to modify (e.g., player, console, clan). Defaults to current account if empty.\" },"
                 + "    \"targetAccountUuid\": { \"type\": \"string\", \"description\": \"Optional. The UUID of the target account. Defaults to current account if empty.\" }"
                 + "  },"
-                + "  \"required\": [\"newToken\"]"
+                + "  \"required\": [\"token\"]"
                 + "}";
     }
 
@@ -48,17 +47,17 @@ public class ChangeTokenTool implements AITool {
 
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
-        String newToken = (String) arguments.get("newToken");
+        String token = (String) arguments.get("token");
 
-        if (newToken == null || newToken.isBlank()) {
-            return CompletableFuture.completedFuture("Error: 'newToken' parameter is missing.");
+        if (token == null || token.isBlank()) {
+            return CompletableFuture.completedFuture("Error: 'token' parameter is missing.");
         }
 
         String platformName = (String) arguments.get("platformName");
         String targetType = arguments.containsKey("targetAccountType") && arguments.get("targetAccountType") != null ? (String) arguments.get("targetAccountType") : account.accountType();
         String targetUuid = arguments.containsKey("targetAccountUuid") && arguments.get("targetAccountUuid") != null ? (String) arguments.get("targetAccountUuid") : account.accountUuid();
 
-        ChangeTokenEvent event = new ChangeTokenEvent(account, targetType, targetUuid, platformName, newToken);
+        SetTokenEvent event = new SetTokenEvent(account, targetType, targetUuid, platformName, token);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
             return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
@@ -78,12 +77,12 @@ public class ChangeTokenTool implements AITool {
 
                 int pId = targetOpt.get().id();
 
-                return manager.setupAccount(targetType, targetUuid, pId, newToken)
-                        .thenApply(updatedAccount -> "Success. The token for '" + platformName + "' has been updated for account type [" + targetType + "].");
+                return manager.setupAccount(targetType, targetUuid, pId, token)
+                        .thenApply(updatedAccount -> "Success. The token for '" + platformName + "' has been set for account type [" + targetType + "].");
             });
         }
 
-        return manager.setupAccount(targetType, targetUuid, account.platformId(), newToken)
-                .thenApply(updatedAccount -> "Success. The token for the active session has been updated for account type [" + targetType + "].");
+        return manager.setupAccount(targetType, targetUuid, account.platformId(), token)
+                .thenApply(updatedAccount -> "Success. The token for the active session has been set for account type [" + targetType + "].");
     }
 }

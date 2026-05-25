@@ -6,35 +6,38 @@ import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 
 /**
- * Event fired when an AI account attempts to view an API token.
+ * Event fired when an AI account attempts to set an API token.
  * This event is fired asynchronously.
  */
-public class GetTokenEvent extends Event implements Cancellable {
+public class SetTokenEvent extends Event implements Cancellable {
     private static final HandlerList HANDLERS = new HandlerList();
     private boolean cancelled = false;
     private final AIAccount executorAccount;
     private final String targetAccountType;
     private final String targetAccountUuid;
     private final String platformName;
+    private final String token;
 
     /**
-     * Constructs a new GetTokenEvent.
+     * Constructs a new SetTokenEvent.
      *
      * @param executorAccount   The account executing the tool.
-     * @param targetAccountType The account type being viewed.
-     * @param targetAccountUuid The UUID of the account being viewed.
-     * @param platformName      The name of the platform, or null if viewing the active session's token.
+     * @param targetAccountType The account type being modified.
+     * @param targetAccountUuid The UUID of the account being modified.
+     * @param platformName      The name of the platform, or null if setting the active session's token.
+     * @param token             The token being set.
      */
-    public GetTokenEvent(AIAccount executorAccount, String targetAccountType, String targetAccountUuid, String platformName) {
+    public SetTokenEvent(AIAccount executorAccount, String targetAccountType, String targetAccountUuid, String platformName, String token) {
         super(true);
         this.executorAccount = executorAccount;
         this.targetAccountType = targetAccountType;
         this.targetAccountUuid = targetAccountUuid;
         this.platformName = platformName;
+        this.token = token;
     }
 
     /**
-     * Gets the account attempting to view the token.
+     * Gets the account attempting to set the token.
      *
      * @return The AIAccount instance of the executor.
      */
@@ -43,7 +46,7 @@ public class GetTokenEvent extends Event implements Cancellable {
     }
 
     /**
-     * Gets the target account type being viewed (e.g., player, clan).
+     * Gets the target account type being modified (e.g., player, clan).
      *
      * @return The target account type.
      */
@@ -52,7 +55,7 @@ public class GetTokenEvent extends Event implements Cancellable {
     }
 
     /**
-     * Gets the target account UUID being viewed.
+     * Gets the target account UUID being modified.
      *
      * @return The target account UUID.
      */
@@ -61,12 +64,21 @@ public class GetTokenEvent extends Event implements Cancellable {
     }
 
     /**
-     * Gets the name of the platform for which the token is being viewed.
+     * Gets the name of the platform for which the token is being set.
      *
      * @return The platform name, or null if applying to the active session.
      */
     public String getPlatformName() {
         return platformName;
+    }
+
+    /**
+     * Gets the token that will be set.
+     *
+     * @return The API token.
+     */
+    public String getToken() {
+        return token;
     }
 
     @Override

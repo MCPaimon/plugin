@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to view tokens.
- * Logic: Fully dynamic. Safely retrieves the token exclusively for the AIAccount that initiated the workflow.
+ * Logic: Fully dynamic. Safely retrieves the token exclusively for the target AIAccount.
  */
 public class GetTokenTool implements AITool {
 
@@ -24,11 +24,18 @@ public class GetTokenTool implements AITool {
     public String getName() { return "get_token"; }
 
     @Override
-    public String getDescription() { return "Retrieves the current interacting account's API token. Provide 'platformName' (e.g., openai, deepseek) to get the token for a specific platform."; }
+    public String getDescription() { return "Retrieves the target account's API token. Provide 'platformName' (e.g., openai, deepseek) to get the token for a specific platform. Can optionally specify 'targetAccountType' and 'targetAccountUuid'."; }
 
     @Override
     public String getParametersJsonSchema() {
-        return "{ \"type\": \"object\", \"properties\": { \"platformName\": { \"type\": \"string\", \"description\": \"The name of the platform\" } } }";
+        return "{"
+                + "  \"type\": \"object\","
+                + "  \"properties\": {"
+                + "    \"platformName\": { \"type\": \"string\", \"description\": \"The name of the platform\" },"
+                + "    \"targetAccountType\": { \"type\": \"string\", \"description\": \"Optional. The account type to view.\" },"
+                + "    \"targetAccountUuid\": { \"type\": \"string\", \"description\": \"Optional. The UUID of the target account.\" }"
+                + "  }"
+                + "}";
     }
 
     @Override
@@ -39,8 +46,11 @@ public class GetTokenTool implements AITool {
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
         String platformName = (String) arguments.get("platformName");
+        String targetType = arguments.containsKey("targetAccountType") && arguments.get("targetAccountType") != null ? (String) arguments.get("targetAccountType") : account.accountType();
+        String targetUuid = arguments.containsKey("targetAccountUuid") && arguments.get("targetAccountUuid") != null ? (String) arguments.get("targetAccountUuid") : account.accountUuid();
 
-        GetTokenEvent event = new GetTokenEvent(account, platformName);
+
+        GetTokenEvent event = new GetTokenEvent(account, targetType, targetUuid, platformName);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
             return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
@@ -60,16 +70,26 @@ public class GetTokenTool implements AITool {
 
                 int pId = targetOpt.get().id();
 
-                return manager.fetchAccount(account.accountType(), account.accountUuid(), pId)
+                return manager.fetchAccount(targetType, targetUuid, pId)
                         .thenApply(targetAccountOpt -> {
                             if (targetAccountOpt.isEmpty() || targetAccountOpt.get().token().isBlank()) {
-                                return "Notice: No API token registered for '" + platformName + "' on account type [" + account.accountType() + "].";
+                                return "Notice: No API token registered for '" + platformName + "' on account type [" + targetType + "].";
                             }
-                            return "The current token for '" + platformName + "' on account type [" + account.accountType() + "] is: `" + targetAccountOpt.get().token() + "`";
+                            return "The current token for '" + platformName + "' on account type [" + targetType + "] is: `" + targetAccountOpt.get().token() + "`";
                         });
             });
         }
 
-        return CompletableFuture.completedFuture("The current token for the active session on account type [" + account.accountType() + "] is: `" + account.token() + "`");
+        if (targetType.equals(account.accountType()) && targetUuid.equals(account.accountUuid())) {
+             return CompletableFuture.completedFuture("The current token for the active session on account type [" + targetType + "] is: `" + account.token() + "`");
+        } else {
+            return manager.fetchAccount(targetType, targetUuid, account.platformId())
+                    .thenApply(targetAccountOpt -> {
+                        if (targetAccountOpt.isEmpty() || targetAccountOpt.get().token().isBlank()) {
+                            return "Notice: No API token registered for active platform on account type [" + targetType + "].";
+                        }
+                        return "The current token for active platform on account type [" + targetType + "] is: `" + targetAccountOpt.get().token() + "`";
+                    });
+        }
     }
 }

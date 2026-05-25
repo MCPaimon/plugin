@@ -88,6 +88,7 @@ public class MCAIPlugin extends JavaPlugin {
         // Register Core Tools
         logger.info("Registering core AI tools...");
         this.manager.registerTool(new ChangeTokenTool());
+        this.manager.registerTool(new SetTokenTool());
         this.manager.registerTool(new CreatePlatform());
         this.manager.registerTool(new CreateModel());
         this.manager.registerTool(new DeleteTokenTool());

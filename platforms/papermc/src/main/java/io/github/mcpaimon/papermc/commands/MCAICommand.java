@@ -3,10 +3,12 @@ package io.github.mcpaimon.papermc.commands;
 import io.github.mcpaimon.api.model.AIActiveSession;
 import io.github.mcpaimon.api.model.AIModel;
 import io.github.mcpaimon.api.model.AIPlatform;
+import io.github.mcpaimon.bukkit.event.PreGenerateSummaryEvent;
 import io.github.mcpaimon.common.client.MCAIAPIClient;
 import io.github.mcpaimon.papermc.MCAIPlugin;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
@@ -135,10 +137,14 @@ public class MCAICommand implements TabExecutor {
             }
 
             AIActiveSession session = sessionOpt.get();
-            return this.plugin.getProvider().sendPrompt(type, uuid, session.platformId(), session.modelId(), promptText, this.aiClient)
-                .thenAccept(response -> {
-                    sender.sendMessage(Component.text("[MCAI] " + response.content(), NamedTextColor.AQUA));
-                });
+            return this.plugin.getProvider().sendPrompt(type, uuid, session.platformId(), session.modelId(), promptText, this.aiClient, (acc, results) -> {
+                // Fire Bukkit event to allow modifications to tool results
+                PreGenerateSummaryEvent preEvent = new PreGenerateSummaryEvent(acc, promptText, results);
+                Bukkit.getPluginManager().callEvent(preEvent);
+                return preEvent.getToolResults();
+            }).thenAccept(response -> {
+                sender.sendMessage(Component.text("[MCAI] " + response.content(), NamedTextColor.AQUA));
+            });
         }).exceptionally(e -> {
             sender.sendMessage(Component.text("[MCAI] Error: " + e.getMessage(), NamedTextColor.RED));
             return null;

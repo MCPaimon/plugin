@@ -6,26 +6,32 @@ import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 
 /**
- * Event fired when an AI account attempts to change its API token.
+ * Event fired when an AI account attempts to change an API token.
  * This event is fired asynchronously.
  */
 public class ChangeTokenEvent extends Event implements Cancellable {
     private static final HandlerList HANDLERS = new HandlerList();
     private boolean cancelled = false;
-    private final AIAccount account;
+    private final AIAccount executorAccount;
+    private final String targetAccountType;
+    private final String targetAccountUuid;
     private final String platformName;
     private final String newToken;
 
     /**
      * Constructs a new ChangeTokenEvent.
      *
-     * @param account      The account attempting to change the token.
-     * @param platformName The name of the platform, or null if changing the active session's token.
-     * @param newToken     The new token being set.
+     * @param executorAccount   The account executing the tool.
+     * @param targetAccountType The account type being modified.
+     * @param targetAccountUuid The UUID of the account being modified.
+     * @param platformName      The name of the platform, or null if changing the active session's token.
+     * @param newToken          The new token being set.
      */
-    public ChangeTokenEvent(AIAccount account, String platformName, String newToken) {
+    public ChangeTokenEvent(AIAccount executorAccount, String targetAccountType, String targetAccountUuid, String platformName, String newToken) {
         super(true);
-        this.account = account;
+        this.executorAccount = executorAccount;
+        this.targetAccountType = targetAccountType;
+        this.targetAccountUuid = targetAccountUuid;
         this.platformName = platformName;
         this.newToken = newToken;
     }
@@ -33,10 +39,28 @@ public class ChangeTokenEvent extends Event implements Cancellable {
     /**
      * Gets the account attempting to change the token.
      *
-     * @return The AIAccount instance.
+     * @return The AIAccount instance of the executor.
      */
-    public AIAccount getAccount() {
-        return account;
+    public AIAccount getExecutorAccount() {
+        return executorAccount;
+    }
+
+    /**
+     * Gets the target account type being modified (e.g., player, clan).
+     *
+     * @return The target account type.
+     */
+    public String getTargetAccountType() {
+        return targetAccountType;
+    }
+
+    /**
+     * Gets the target account UUID being modified.
+     *
+     * @return The target account UUID.
+     */
+    public String getTargetAccountUuid() {
+        return targetAccountUuid;
     }
 
     /**

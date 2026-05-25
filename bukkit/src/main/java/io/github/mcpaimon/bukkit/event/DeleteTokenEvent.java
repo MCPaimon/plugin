@@ -6,34 +6,58 @@ import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 
 /**
- * Event fired when an AI account attempts to delete its API token.
+ * Event fired when an AI account attempts to delete an API token.
  * This event is fired asynchronously.
  */
 public class DeleteTokenEvent extends Event implements Cancellable {
     private static final HandlerList HANDLERS = new HandlerList();
     private boolean cancelled = false;
-    private final AIAccount account;
+    private final AIAccount executorAccount;
+    private final String targetAccountType;
+    private final String targetAccountUuid;
     private final String platformName;
 
     /**
      * Constructs a new DeleteTokenEvent.
      *
-     * @param account      The account attempting to delete the token.
-     * @param platformName The name of the platform, or null if deleting the active session's token.
+     * @param executorAccount   The account executing the tool.
+     * @param targetAccountType The account type being modified.
+     * @param targetAccountUuid The UUID of the account being modified.
+     * @param platformName      The name of the platform, or null if deleting the active session's token.
      */
-    public DeleteTokenEvent(AIAccount account, String platformName) {
+    public DeleteTokenEvent(AIAccount executorAccount, String targetAccountType, String targetAccountUuid, String platformName) {
         super(true);
-        this.account = account;
+        this.executorAccount = executorAccount;
+        this.targetAccountType = targetAccountType;
+        this.targetAccountUuid = targetAccountUuid;
         this.platformName = platformName;
     }
 
     /**
      * Gets the account attempting to delete the token.
      *
-     * @return The AIAccount instance.
+     * @return The AIAccount instance of the executor.
      */
-    public AIAccount getAccount() {
-        return account;
+    public AIAccount getExecutorAccount() {
+        return executorAccount;
+    }
+
+    /**
+     * Gets the target account type being modified (e.g., player, clan).
+     *
+     * @return The target account type.
+     */
+    public String getTargetAccountType() {
+        return targetAccountType;
+    }
+
+    /**
+     * Gets the target account UUID being modified.
+     *
+     * @return The target account UUID.
+     */
+    public String getTargetAccountUuid() {
+        return targetAccountUuid;
     }
 
     /**

@@ -6,6 +6,7 @@ import io.github.mcpaimon.api.provider.IAIAccountProvider;
 import io.github.mcpaimon.api.tools.AITool;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 
 /**
  * Provides the main workflow integration for the AI system, handling prompt sending and tool execution loops.
@@ -49,7 +50,7 @@ public class MCAIProvider {
      * @return A CompletableFuture containing the final AIResponse.
      */
     public CompletableFuture<AIResponse> sendPrompt(IAIAccountProvider provider, int platformId, String modelId, String prompt, IAIWorkflowClient aiClient) {
-        return sendPrompt(provider.getAccountType(), provider.getAccountUuid(), platformId, modelId, prompt, aiClient);
+        return sendPrompt(provider.getAccountType(), provider.getAccountUuid(), platformId, modelId, prompt, aiClient, null);
     }
 
     /**
@@ -64,6 +65,23 @@ public class MCAIProvider {
      * @return A CompletableFuture containing the final AIResponse.
      */
     public CompletableFuture<AIResponse> sendPrompt(String accountType, String accountUuid, int platformId, String modelId, String prompt, IAIWorkflowClient aiClient) {
+        return sendPrompt(accountType, accountUuid, platformId, modelId, prompt, aiClient, null);
+    }
+
+    /**
+     * Sends a prompt to the AI, processes any tool calls required, and returns the final response.
+     * Allows an interceptor to modify or append context to the tool results before final summary.
+     *
+     * @param accountType           The type of account.
+     * @param accountUuid           The UUID of the account.
+     * @param platformId            The ID of the AI platform.
+     * @param modelId               The ID of the AI model.
+     * @param prompt                The user's input prompt.
+     * @param aiClient              The client used to communicate with the AI API.
+     * @param preSummaryInterceptor A function to intercept and modify tool results before sending to the AI.
+     * @return A CompletableFuture containing the final AIResponse.
+     */
+    public CompletableFuture<AIResponse> sendPrompt(String accountType, String accountUuid, int platformId, String modelId, String prompt, IAIWorkflowClient aiClient, BiFunction<AIAccount, String, String> preSummaryInterceptor) {
         String type = (accountType == null || accountType.isBlank()) ? DEFAULT_ACCOUNT_TYPE : accountType;
 
         return this.manager.fetchAccount(type, accountUuid, platformId).thenCompose(accountOpt -> {
@@ -97,7 +115,12 @@ public class MCAIProvider {
                         List<ToolCall> toolCalls = toolResult.data();
                         
                         if (toolCalls == null || toolCalls.isEmpty()) {
-                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, "No tools were used.").thenApply(finalResponse -> 
+                            String finalToolResults = "No tools were used.";
+                            if (preSummaryInterceptor != null) {
+                                finalToolResults = preSummaryInterceptor.apply(account, finalToolResults);
+                            }
+                            
+                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, finalToolResults).thenApply(finalResponse -> 
                                 new AIResponse(
                                     finalResponse.content(),
                                     categoryResult.promptTokens() + toolResult.promptTokens() + finalResponse.promptTokens(),
@@ -119,7 +142,13 @@ public class MCAIProvider {
                         return CompletableFuture.allOf(executionFutures.toArray(new CompletableFuture[0])).thenCompose(v -> {
                             StringBuilder sb = new StringBuilder();
                             for (CompletableFuture<String> f : executionFutures) sb.append(f.join());
-                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, sb.toString()).thenApply(finalResponse -> 
+                            
+                            String finalToolResults = sb.toString();
+                            if (preSummaryInterceptor != null) {
+                                finalToolResults = preSummaryInterceptor.apply(account, finalToolResults);
+                            }
+                            
+                            return aiClient.generateFinalSummary(platform, modelId, account, prompt, finalToolResults).thenApply(finalResponse -> 
                                 new AIResponse(
                                     finalResponse.content(),
                                     categoryResult.promptTokens() + toolResult.promptTokens() + finalResponse.promptTokens(),
