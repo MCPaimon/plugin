@@ -19,5 +19,10 @@ database:
     uri: "mongodb://localhost:27017"
     database: "mcai"
 
+console:
+  platform: "deepseek"
+  model: "deepseek-chat"
+  token: "your-console-token"
+
 platforms:
   - deepseek,https://api.deepseek.com,deepseek-chat

@@ -15,7 +15,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to create and register a new AI platform.
- * Logic: Requires OP status to execute. Prevents creating duplicates.
+ * Logic: Requires OP status (if executed by player) to execute. Prevents creating duplicates.
  */
 public class CreatePlatform implements AITool {
 
@@ -48,14 +48,18 @@ public class CreatePlatform implements AITool {
 
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
-        Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
-        if (sender == null) {
-            return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
-        }
+        boolean isConsole = account.accountType().equalsIgnoreCase("console");
 
-        // Permission Check: Strictly OP only
-        if (!sender.isOp()) {
-            return CompletableFuture.completedFuture("Error: Access Denied. Only server operators (OP) can create new platforms.");
+        if (!isConsole) {
+            Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
+            if (sender == null) {
+                return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+            }
+
+            // Permission Check: Strictly OP only for players
+            if (!sender.isOp()) {
+                return CompletableFuture.completedFuture("Error: Access Denied. Only server operators (OP) can create new platforms.");
+            }
         }
 
         String displayName = (String) arguments.get("displayName");

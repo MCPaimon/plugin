@@ -40,13 +40,19 @@ public class GetTokenTool implements AITool {
 
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
-        Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
-        if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+        boolean isConsole = account.accountType().equalsIgnoreCase("console");
+        String senderName = "CONSOLE";
+        
+        if (!isConsole) {
+            Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
+            if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+            senderName = sender.getName();
+        }
 
-        String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : sender.getName();
+        String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : senderName;
 
         // Permission Check: STRICTLY self only, OP means nothing here.
-        if (!sender.getName().equalsIgnoreCase(targetName)) {
+        if (!isConsole && !senderName.equalsIgnoreCase(targetName)) {
             return CompletableFuture.completedFuture("Error: Access Denied. You can NEVER view another player's token, even as OP.");
         }
 

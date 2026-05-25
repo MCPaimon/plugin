@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to delete tokens (sets to empty string).
- * Logic: Can ONLY delete own token.
+ * Logic: Can ONLY delete own token (or console can delete console's).
  * Supports deleting tokens for specific platforms by name.
  */
 public class DeleteTokenTool implements AITool {
@@ -40,13 +40,19 @@ public class DeleteTokenTool implements AITool {
 
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
-        Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
-        if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+        boolean isConsole = account.accountType().equalsIgnoreCase("console");
+        String senderName = "CONSOLE";
+        
+        if (!isConsole) {
+            Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
+            if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+            senderName = sender.getName();
+        }
 
-        String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : sender.getName();
+        String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : senderName;
 
-        // Permission Check: STRICTLY self only
-        if (!sender.getName().equalsIgnoreCase(targetName)) {
+        // Permission Check: STRICTLY self only (console counts as itself)
+        if (!isConsole && !senderName.equalsIgnoreCase(targetName)) {
             return CompletableFuture.completedFuture("Error: Access Denied. You cannot delete another player's token.");
         }
 

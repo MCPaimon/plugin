@@ -2,6 +2,7 @@ package io.github.mcpaimon.common;
 
 import io.github.mcpaimon.api.database.IAIDatabase;
 import io.github.mcpaimon.api.model.*;
+import io.github.mcpaimon.api.provider.IAIAccountProvider;
 import io.github.mcpaimon.api.tools.AITool;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -34,6 +35,21 @@ public class MCAIProvider {
     public MCAIProvider(MCAIManager manager, IAIDatabase database) {
         this.manager = manager;
         this.database = database;
+    }
+
+    /**
+     * Sends a prompt to the AI using a dynamic account provider.
+     * This is highly recommended for cross-plugin compatibility (e.g., Clan plugins, Discord bots).
+     *
+     * @param provider   The dynamic account provider instance.
+     * @param platformId The ID of the AI platform.
+     * @param modelId    The ID of the AI model.
+     * @param prompt     The user's input prompt.
+     * @param aiClient   The client used to communicate with the AI API.
+     * @return A CompletableFuture containing the final AIResponse.
+     */
+    public CompletableFuture<AIResponse> sendPrompt(IAIAccountProvider provider, int platformId, String modelId, String prompt, IAIWorkflowClient aiClient) {
+        return sendPrompt(provider.getAccountType(), provider.getAccountUuid(), platformId, modelId, prompt, aiClient);
     }
 
     /**

@@ -1,7 +1,9 @@
 package io.github.mcpaimon.papermc.commands;
 
+import io.github.mcpaimon.api.model.AIActiveSession;
 import io.github.mcpaimon.api.model.AIModel;
 import io.github.mcpaimon.api.model.AIPlatform;
+import io.github.mcpaimon.common.client.MCAIAPIClient;
 import io.github.mcpaimon.papermc.MCAIPlugin;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -16,19 +18,23 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Handles all /ai commands, including validation, feedback, and tab completion.
+ * Handles all /ai commands. Dynamic implementation allows support for Console, Players, 
+ * and future custom account types without duplicating code.
  */
 public class MCAICommand implements TabExecutor {
 
     private final MCAIPlugin plugin;
+    private final MCAIAPIClient aiClient;
     private final List<AIPlatform> platformCache = new ArrayList<>();
     private final ConcurrentHashMap<Integer, List<AIModel>> modelCache = new ConcurrentHashMap<>();
 
-    public MCAICommand(MCAIPlugin plugin) {
+    public MCAICommand(MCAIPlugin plugin, MCAIAPIClient aiClient) {
         this.plugin = plugin;
+        this.aiClient = aiClient;
         refreshCache();
     }
 
@@ -45,20 +51,43 @@ public class MCAICommand implements TabExecutor {
         });
     }
 
+    /**
+     * Resolves the account details based on the CommandSender type.
+     * This provides a unified way to handle different account types dynamically.
+     */
+    private String[] resolveAccount(CommandSender sender) {
+        return (sender instanceof Player p) 
+            ? new String[]{"player", p.getUniqueId().toString()} 
+            : new String[]{"console", "00000000-0000-0000-0000-000000000000"};
+    }
+
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("Only players can use this command.");
-            return true;
-        }
+        String[] accountData = resolveAccount(sender);
+        String type = accountData[0];
+        String uuid = accountData[1];
 
         if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-            sendHelp(player, sender.isOp());
+            sendHelp(sender);
             return true;
         }
 
-        // Toggle AI Chat Mode (/ai chat)
+        // Ask the AI directly (/ai ask <prompt>)
+        if (args[0].equalsIgnoreCase("ask")) {
+            if (args.length < 2) {
+                sender.sendMessage(Component.text("[MCAI] Usage: /ai ask <your prompt>", NamedTextColor.RED));
+                return true;
+            }
+            handleAsk(sender, type, uuid, String.join(" ", Arrays.copyOfRange(args, 1, args.length)));
+            return true;
+        }
+
+        // Toggle AI Chat Mode (/ai chat) - Player Only
         if (args[0].equalsIgnoreCase("chat")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(Component.text("[MCAI] The /ai chat command is only for players. Use '/ai ask <prompt>' instead.", NamedTextColor.RED));
+                return true;
+            }
             if (plugin.getAiChatSessions().contains(player.getUniqueId())) {
                 plugin.getAiChatSessions().remove(player.getUniqueId());
                 player.sendMessage(Component.text("[MCAI] AI Chat Mode: OFF", NamedTextColor.RED));
@@ -72,9 +101,9 @@ public class MCAICommand implements TabExecutor {
         // Set Active Model (/ai active set <platform> <model>)
         if (args[0].equalsIgnoreCase("active")) {
             if (args.length >= 4 && args[1].equalsIgnoreCase("set")) {
-                handleActiveSet(player, args[2], args[3]);
+                handleActiveSet(sender, type, uuid, args[2], args[3]);
             } else {
-                player.sendMessage(Component.text("[MCAI] Usage: /ai active set <platform> <model>", NamedTextColor.RED));
+                sender.sendMessage(Component.text("[MCAI] Usage: /ai active set <platform> <model>", NamedTextColor.RED));
             }
             return true;
         }
@@ -82,28 +111,50 @@ public class MCAICommand implements TabExecutor {
         // Set API Token (/ai token set <platform> <token>)
         if (args[0].equalsIgnoreCase("token")) {
             if (args.length >= 4 && args[1].equalsIgnoreCase("set")) {
-                handleTokenSet(player, args[2], String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
+                handleTokenSet(sender, type, uuid, args[2], String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
             } else {
-                player.sendMessage(Component.text("[MCAI] Usage: /ai token set <platform> <token>", NamedTextColor.RED));
+                sender.sendMessage(Component.text("[MCAI] Usage: /ai token set <platform> <token>", NamedTextColor.RED));
             }
             return true;
         }
 
-        // Fallback for unknown subcommands
-        sendHelp(player, sender.isOp());
+        sendHelp(sender);
         return true;
+    }
+
+    /**
+     * Handles sending a direct prompt to the AI. Includes feedback.
+     */
+    private void handleAsk(CommandSender sender, String type, String uuid, String promptText) {
+        sender.sendMessage(Component.text("[MCAI] Thinking...", NamedTextColor.GRAY));
+
+        this.plugin.getManager().getActiveSession(type, uuid).thenCompose(sessionOpt -> {
+            if (sessionOpt.isEmpty()) {
+                sender.sendMessage(Component.text("[MCAI] Error: No active AI session found. Use '/ai active set <platform> <model>' first.", NamedTextColor.RED));
+                return CompletableFuture.completedFuture(null);
+            }
+
+            AIActiveSession session = sessionOpt.get();
+            return this.plugin.getProvider().sendPrompt(type, uuid, session.platformId(), session.modelId(), promptText, this.aiClient)
+                .thenAccept(response -> {
+                    sender.sendMessage(Component.text("[MCAI] " + response.content(), NamedTextColor.AQUA));
+                });
+        }).exceptionally(e -> {
+            sender.sendMessage(Component.text("[MCAI] Error: " + e.getMessage(), NamedTextColor.RED));
+            return null;
+        });
     }
 
     /**
      * Handles setting the active AI session. Includes validation and user feedback.
      */
-    private void handleActiveSet(Player player, String pName, String mName) {
+    private void handleActiveSet(CommandSender sender, String type, String uuid, String pName, String mName) {
         Optional<AIPlatform> platformOpt = platformCache.stream()
                 .filter(p -> p.displayName().equalsIgnoreCase(pName))
                 .findFirst();
         
         if (platformOpt.isEmpty()) {
-            player.sendMessage(Component.text("[MCAI] Error: Platform '" + pName + "' not found.", NamedTextColor.RED));
+            sender.sendMessage(Component.text("[MCAI] Error: Platform '" + pName + "' not found.", NamedTextColor.RED));
             return;
         }
         
@@ -111,15 +162,15 @@ public class MCAICommand implements TabExecutor {
         List<AIModel> models = modelCache.get(p.id());
         
         if (models == null || models.stream().noneMatch(m -> m.modelId().equalsIgnoreCase(mName))) {
-            player.sendMessage(Component.text("[MCAI] Error: Model '" + mName + "' not found for platform '" + pName + "'.", NamedTextColor.RED));
+            sender.sendMessage(Component.text("[MCAI] Error: Model '" + mName + "' not found for platform '" + pName + "'.", NamedTextColor.RED));
             return;
         }
 
-        this.plugin.getManager().setActiveSession("player", player.getUniqueId().toString(), p.id(), mName).thenRun(() -> {
-            player.sendMessage(Component.text("[MCAI] Active AI successfully set to platform: " + pName + ", model: " + mName, NamedTextColor.GREEN));
+        this.plugin.getManager().setActiveSession(type, uuid, p.id(), mName).thenRun(() -> {
+            sender.sendMessage(Component.text("[MCAI] Active AI successfully set to platform: " + pName + ", model: " + mName, NamedTextColor.GREEN));
             refreshCache();
         }).exceptionally(throwable -> {
-            player.sendMessage(Component.text("[MCAI] Error: Failed to set active AI. " + throwable.getMessage(), NamedTextColor.RED));
+            sender.sendMessage(Component.text("[MCAI] Error: Failed to set active AI. " + throwable.getMessage(), NamedTextColor.RED));
             return null;
         });
     }
@@ -127,34 +178,35 @@ public class MCAICommand implements TabExecutor {
     /**
      * Handles setting the API token. Includes validation and user feedback.
      */
-    private void handleTokenSet(Player player, String pName, String token) {
+    private void handleTokenSet(CommandSender sender, String type, String uuid, String pName, String token) {
         Optional<AIPlatform> platformOpt = platformCache.stream()
                 .filter(p -> p.displayName().equalsIgnoreCase(pName))
                 .findFirst();
         
         if (platformOpt.isEmpty()) {
-            player.sendMessage(Component.text("[MCAI] Error: Platform '" + pName + "' not found.", NamedTextColor.RED));
+            sender.sendMessage(Component.text("[MCAI] Error: Platform '" + pName + "' not found.", NamedTextColor.RED));
             return;
         }
         
         AIPlatform p = platformOpt.get();
         
-        this.plugin.getManager().setupAccount("player", player.getUniqueId().toString(), p.id(), token).thenRun(() -> {
-            player.sendMessage(Component.text("[MCAI] Token successfully set for platform: " + pName, NamedTextColor.GREEN));
+        this.plugin.getManager().setupAccount(type, uuid, p.id(), token).thenRun(() -> {
+            sender.sendMessage(Component.text("[MCAI] Token successfully set for platform: " + pName, NamedTextColor.GREEN));
         }).exceptionally(throwable -> {
-            player.sendMessage(Component.text("[MCAI] Error: Failed to set token. " + throwable.getMessage(), NamedTextColor.RED));
+            sender.sendMessage(Component.text("[MCAI] Error: Failed to set token. " + throwable.getMessage(), NamedTextColor.RED));
             return null;
         });
     }
 
     /**
-     * Sends the command help menu to the player.
+     * Sends the command help menu to the sender.
      */
-    private void sendHelp(Player player, boolean isOp) {
-        player.sendMessage(Component.text("--- MCAI Help ---", NamedTextColor.YELLOW));
-        player.sendMessage(Component.text("/ai chat - Toggle AI chat mode", NamedTextColor.WHITE));
-        player.sendMessage(Component.text("/ai active set <platform> <model> - Set active AI model", NamedTextColor.WHITE));
-        player.sendMessage(Component.text("/ai token set <platform> <token> - Set API token for platform", NamedTextColor.WHITE));
+    private void sendHelp(CommandSender sender) {
+        sender.sendMessage(Component.text("--- MCAI Help ---", NamedTextColor.YELLOW));
+        sender.sendMessage(Component.text("/ai ask <prompt> - Ask AI a question directly", NamedTextColor.WHITE));
+        if (sender instanceof Player) sender.sendMessage(Component.text("/ai chat - Toggle AI chat mode", NamedTextColor.WHITE));
+        sender.sendMessage(Component.text("/ai active set <platform> <model> - Set active AI model", NamedTextColor.WHITE));
+        sender.sendMessage(Component.text("/ai token set <platform> <token> - Set API token for platform", NamedTextColor.WHITE));
     }
 
     @Override
@@ -162,7 +214,8 @@ public class MCAICommand implements TabExecutor {
         List<String> completions = new ArrayList<>();
         
         if (args.length == 1) {
-            completions.addAll(List.of("active", "token", "chat", "help"));
+            completions.addAll(List.of("ask", "active", "token", "help"));
+            if (sender instanceof Player) completions.add("chat");
         } else if (args.length == 2) {
             if (args[0].equalsIgnoreCase("active") || args[0].equalsIgnoreCase("token")) {
                 completions.add("set");
@@ -184,7 +237,6 @@ public class MCAICommand implements TabExecutor {
         // Filter the completions list to match the current argument prefix
         String currentArg = args[args.length - 1].toLowerCase();
         completions.removeIf(s -> !s.toLowerCase().startsWith(currentArg));
-        
         return completions;
     }
 }

@@ -142,6 +142,21 @@ public class MCAIPlugin extends JavaPlugin {
             logger.warning("No platforms defined in config.yml or 'platforms' list is empty.");
         }
 
+        // Initialize Console Account
+        if (getConfig().contains("console.platform")) {
+            String cPlatform = getConfig().getString("console.platform");
+            String cModel = getConfig().getString("console.model");
+            String cToken = getConfig().getString("console.token");
+            
+            this.provider.getPlatforms().thenAccept(platforms -> {
+                platforms.stream().filter(p -> p.displayName().equalsIgnoreCase(cPlatform)).findFirst().ifPresent(p -> {
+                    this.manager.setupAccount("console", "00000000-0000-0000-0000-000000000000", p.id(), cToken).join();
+                    this.manager.setActiveSession("console", "00000000-0000-0000-0000-000000000000", p.id(), cModel).join();
+                    logger.info("Console AI Account successfully configured.");
+                });
+            });
+        }
+
         MCAIAPIClient aiClient = new MCAIAPIClient();
 
         logger.info("Loading extensions...");
@@ -149,7 +164,7 @@ public class MCAIPlugin extends JavaPlugin {
         Executor mainThreadExecutor = command -> Bukkit.getScheduler().runTask(this, command);
         this.extensionManager.loadAllExtensions(this, mainThreadExecutor);
 
-        MCAICommand aiCommand = new MCAICommand(this);
+        MCAICommand aiCommand = new MCAICommand(this, aiClient);
         if (getCommand("ai") != null) {
             getCommand("ai").setExecutor(aiCommand);
             getCommand("ai").setTabCompleter(aiCommand);

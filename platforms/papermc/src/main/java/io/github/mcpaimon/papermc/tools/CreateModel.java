@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to create and register a new AI model for a specific platform.
- * Logic: Requires OP status to execute. Prevents creating duplicate models on the same platform.
+ * Logic: Requires OP status (if executed by player) to execute. Prevents creating duplicate models on the same platform.
  */
 public class CreateModel implements AITool {
 
@@ -50,14 +50,18 @@ public class CreateModel implements AITool {
 
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
-        Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
-        if (sender == null) {
-            return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
-        }
+        boolean isConsole = account.accountType().equalsIgnoreCase("console");
 
-        // Permission Check: Strictly OP only
-        if (!sender.isOp()) {
-            return CompletableFuture.completedFuture("Error: Access Denied. Only server operators (OP) can register new models.");
+        if (!isConsole) {
+            Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
+            if (sender == null) {
+                return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+            }
+
+            // Permission Check: Strictly OP only for players
+            if (!sender.isOp()) {
+                return CompletableFuture.completedFuture("Error: Access Denied. Only server operators (OP) can register new models.");
+            }
         }
 
         String platformName = (String) arguments.get("platformName");

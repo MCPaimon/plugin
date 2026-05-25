@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Tool to change tokens.
- * Logic: Can ONLY change own token. Requires manager access to update DB.
+ * Logic: Can ONLY change own token (or console can change console's). Requires manager access to update DB.
  * Supports updating tokens for specific platforms by name.
  */
 public class ChangeTokenTool implements AITool {
@@ -40,18 +40,24 @@ public class ChangeTokenTool implements AITool {
 
     @Override
     public CompletableFuture<String> execute(Map<String, Object> arguments, AIAccount account) {
-        Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
-        if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+        boolean isConsole = account.accountType().equalsIgnoreCase("console");
+        String senderName = "CONSOLE";
+        
+        if (!isConsole) {
+            Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
+            if (sender == null) return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
+            senderName = sender.getName();
+        }
 
-        String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : sender.getName();
+        String targetName = arguments.containsKey("targetName") ? (String) arguments.get("targetName") : senderName;
         String newToken = (String) arguments.get("newToken");
 
         if (newToken == null || newToken.isBlank()) {
             return CompletableFuture.completedFuture("Error: 'newToken' parameter is missing.");
         }
 
-        // Permission Check: STRICTLY self only
-        if (!sender.getName().equalsIgnoreCase(targetName)) {
+        // Permission Check: STRICTLY self only (console counts as itself)
+        if (!isConsole && !senderName.equalsIgnoreCase(targetName)) {
             return CompletableFuture.completedFuture("Error: Access Denied. You cannot change another player's token.");
         }
 
