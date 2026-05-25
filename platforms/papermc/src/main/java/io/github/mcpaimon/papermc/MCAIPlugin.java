@@ -27,9 +27,24 @@ import java.util.logging.Logger;
  */
 public class MCAIPlugin extends JavaPlugin {
 
+    /**
+     * Manager for handling core AI data and interactions.
+     */
     private MCAIManager manager;
+
+    /**
+     * Provider serving as the entry point for AI workflows and queries.
+     */
     private MCAIProvider provider;
+
+    /**
+     * Manager handling the dynamic loading and unloading of extensions.
+     */
     private MCExtensionManager extensionManager;
+
+    /**
+     * Set of player UUIDs currently in an active AI chat session.
+     */
     private final Set<UUID> aiChatSessions = new HashSet<>();
 
     @Override
@@ -62,9 +77,6 @@ public class MCAIPlugin extends JavaPlugin {
 
         this.manager = new MCAIManager(database);
         this.provider = new MCAIProvider(this.manager, database);
-        
-        // Wait for database tables to be created
-        this.manager.initialize().join();
 
         // Register Categories
         logger.info("Registering AI tool categories...");
@@ -157,11 +169,25 @@ public class MCAIPlugin extends JavaPlugin {
             };
             this.extensionManager.disableAllExtensions(this, disableExecutor);
         }
-        if (this.manager != null) this.manager.shutdown().join();
+        if (this.provider != null) this.provider.shutdown().join();
         getLogger().info("MCAI Plugin has been disabled!");
     }
 
+    /**
+     * Gets the MCAIManager instance.
+     * @return The active MCAIManager.
+     */
     public MCAIManager getManager() { return this.manager; }
+    
+    /**
+     * Gets the MCAIProvider instance.
+     * @return The active MCAIProvider.
+     */
     public MCAIProvider getProvider() { return this.provider; }
+    
+    /**
+     * Gets the set of UUIDs of players currently in AI chat sessions.
+     * @return A set of player UUIDs.
+     */
     public Set<UUID> getAiChatSessions() { return this.aiChatSessions; }
 }

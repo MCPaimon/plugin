@@ -23,17 +23,36 @@ import java.util.concurrent.CompletableFuture;
  */
 public class MCAISQLite implements IAIDatabase {
 
+    /**
+     * The connection pool data source.
+     */
     private final HikariDataSource dataSource;
+    
+    /**
+     * Formatting standard for parsing date strings from the database.
+     */
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
+    /**
+     * Constructs the SQLite database connection and initializes tables.
+     *
+     * @param databaseFile The file to store the SQLite database.
+     */
     public MCAISQLite(File databaseFile) {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:sqlite:" + databaseFile.getAbsolutePath());
         config.setDriverClassName("org.sqlite.JDBC");
         config.setMaximumPoolSize(1);
         this.dataSource = new HikariDataSource(config);
+        initialize();
     }
 
+    /**
+     * Safely parses a string date into a Timestamp.
+     *
+     * @param dateStr The date string from the database.
+     * @return A SQL Timestamp representing the specified date.
+     */
     private Timestamp parseTimestamp(String dateStr) {
         if (dateStr == null) return new Timestamp(System.currentTimeMillis());
         try { 

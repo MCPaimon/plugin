@@ -20,8 +20,20 @@ import java.util.concurrent.CompletableFuture;
  */
 public class MCAIPostgreSQL implements IAIDatabase {
 
+    /**
+     * The connection pool data source.
+     */
     private final HikariDataSource dataSource;
 
+    /**
+     * Constructs the PostgreSQL database connection and initializes tables.
+     *
+     * @param host     The database host.
+     * @param port     The database port.
+     * @param database The database name.
+     * @param username The database user username.
+     * @param password The database user password.
+     */
     public MCAIPostgreSQL(String host, int port, String database, String username, String password) {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database);
@@ -31,6 +43,7 @@ public class MCAIPostgreSQL implements IAIDatabase {
         config.addDataSourceProperty("prepStmtCacheSize", "250");
         config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
         this.dataSource = new HikariDataSource(config);
+        initialize();
     }
 
     @Override
@@ -180,7 +193,7 @@ public class MCAIPostgreSQL implements IAIDatabase {
     public CompletableFuture<Optional<AIAccount>> getAccount(String accountType, String accountUuid, int platformId) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT * FROM ai_accounts WHERE account_type = ? AND account_uuid = ? AND platform_id = ?";
-            try (Connection conn = dataSource.getConnection(); PreparedStatement ps =prepareStatement(sql)) {
+            try (Connection conn = dataSource.getConnection(); PreparedStatement ps = prepareStatement(sql)) {
                 ps.setString(1, accountType); 
                 ps.setString(2, accountUuid); 
                 ps.setInt(3, platformId);
@@ -196,6 +209,13 @@ public class MCAIPostgreSQL implements IAIDatabase {
         });
     }
     
+    /**
+     * Prepares a SQL statement from the connection pool.
+     *
+     * @param sql The SQL string to prepare.
+     * @return A PreparedStatement instance.
+     * @throws SQLException If a database access error occurs.
+     */
     private PreparedStatement prepareStatement(String sql) throws SQLException {
         return dataSource.getConnection().prepareStatement(sql);
     }

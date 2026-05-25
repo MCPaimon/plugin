@@ -20,8 +20,20 @@ import java.util.concurrent.CompletableFuture;
  */
 public class MCAIMySQL implements IAIDatabase {
 
+    /**
+     * The connection pool data source.
+     */
     private final HikariDataSource dataSource;
 
+    /**
+     * Constructs the MySQL database connection and initializes tables.
+     *
+     * @param host     The database host.
+     * @param port     The database port.
+     * @param database The database name.
+     * @param username The database user username.
+     * @param password The database user password.
+     */
     public MCAIMySQL(String host, int port, String database, String username, String password) {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=false&serverTimezone=UTC");
@@ -31,6 +43,7 @@ public class MCAIMySQL implements IAIDatabase {
         config.addDataSourceProperty("prepStmtCacheSize", "250");
         config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
         this.dataSource = new HikariDataSource(config);
+        initialize();
     }
 
     @Override

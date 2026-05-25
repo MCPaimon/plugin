@@ -6,16 +6,47 @@ import io.github.mcpaimon.api.tools.AITool;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Provides the main workflow integration for the AI system, handling prompt sending and tool execution loops.
+ */
 public class MCAIProvider {
+    /**
+     * The default account type used if none is specified.
+     */
     private static final String DEFAULT_ACCOUNT_TYPE = "player";
+    
+    /**
+     * The central manager for accounts, tools, and sessions.
+     */
     private final MCAIManager manager;
+    
+    /**
+     * The database interface for data retrieval and storage.
+     */
     private final IAIDatabase database;
 
+    /**
+     * Constructs a new MCAIProvider instance.
+     *
+     * @param manager  The manager handling core AI features.
+     * @param database The database implementation.
+     */
     public MCAIProvider(MCAIManager manager, IAIDatabase database) {
         this.manager = manager;
         this.database = database;
     }
 
+    /**
+     * Sends a prompt to the AI, processes any tool calls required, and returns the final response.
+     *
+     * @param accountType The type of account.
+     * @param accountUuid The UUID of the account.
+     * @param platformId  The ID of the AI platform.
+     * @param modelId     The ID of the AI model.
+     * @param prompt      The user's input prompt.
+     * @param aiClient    The client used to communicate with the AI API.
+     * @return A CompletableFuture containing the final AIResponse.
+     */
     public CompletableFuture<AIResponse> sendPrompt(String accountType, String accountUuid, int platformId, String modelId, String prompt, IAIWorkflowClient aiClient) {
         String type = (accountType == null || accountType.isBlank()) ? DEFAULT_ACCOUNT_TYPE : accountType;
 
@@ -87,15 +118,48 @@ public class MCAIProvider {
         });
     }
 
+    /**
+     * Retrieves all available AI platforms.
+     *
+     * @return A CompletableFuture containing a list of platforms.
+     */
     public CompletableFuture<List<AIPlatform>> getPlatforms() { return this.database.getAllPlatforms(); }
+
+    /**
+     * Retrieves all available models for a given platform.
+     *
+     * @param platformId The ID of the platform.
+     * @return A CompletableFuture containing a list of models.
+     */
     public CompletableFuture<List<AIModel>> getModels(int platformId) { return this.database.getModelsByPlatform(platformId); }
 
+    /**
+     * Shuts down the database connection securely.
+     *
+     * @return A CompletableFuture representing the shutdown task.
+     */
+    public CompletableFuture<Void> shutdown() { 
+        return this.database.close(); 
+    }
+
+    /**
+     * Record representing a tool call decision from the AI.
+     */
     public record ToolCall(String toolName, Map<String, Object> arguments) {}
     
+    /**
+     * Record representing the final response text and token usages from the AI interaction.
+     */
     public record AIResponse(String content, int promptTokens, int completionTokens, int totalTokens) {}
 
+    /**
+     * Record representing the result of an AI workflow step, generic over its data type.
+     */
     public record AIWorkflowResult<T>(T data, int promptTokens, int completionTokens, int totalTokens) {}
 
+    /**
+     * Client interface for managing the AI workflow calls and generating summaries.
+     */
     public interface IAIWorkflowClient {
         CompletableFuture<AIWorkflowResult<List<String>>> decideCategories(AIPlatform platform, String modelId, AIAccount account, String prompt, Map<String, String> categories);
         CompletableFuture<AIWorkflowResult<List<ToolCall>>> decideTools(AIPlatform platform, String modelId, AIAccount account, String prompt, List<AITool> tools);

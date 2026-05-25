@@ -11,8 +11,19 @@ import java.util.concurrent.*;
  * Manages the core AI functionalities including platforms, models, accounts, active sessions, tools, and categories.
  */
 public class MCAIManager {
+    /**
+     * The database implementation used for storing AI data.
+     */
     private final IAIDatabase database;
+    
+    /**
+     * A thread-safe map storing registered AI tools by their names.
+     */
     private final Map<String, AITool> registeredTools = new ConcurrentHashMap<>();
+    
+    /**
+     * A thread-safe map storing registered tool categories and their descriptions.
+     */
     private final Map<String, String> registeredCategories = new ConcurrentHashMap<>();
 
     /**
@@ -25,27 +36,15 @@ public class MCAIManager {
     }
 
     /**
-     * Initializes the database connection and schemas.
-     *
-     * @return A CompletableFuture representing the initialization task.
-     */
-    public CompletableFuture<Void> initialize() { return this.database.initialize(); }
-
-    /**
-     * Shuts down the database connection securely.
-     *
-     * @return A CompletableFuture representing the shutdown task.
-     */
-    public CompletableFuture<Void> shutdown() { return this.database.close(); }
-
-    /**
      * Registers a new AI platform in the database.
      *
      * @param displayName The display name of the AI platform.
      * @param url         The base URL of the AI platform API.
      * @return A CompletableFuture containing the newly created AIPlatform object.
      */
-    public CompletableFuture<AIPlatform> registerPlatform(String displayName, String url) { return this.database.createPlatform(displayName, url); }
+    public CompletableFuture<AIPlatform> registerPlatform(String displayName, String url) { 
+        return this.database.createPlatform(displayName, url); 
+    }
 
     /**
      * Registers a new AI model under a specific platform.
@@ -54,7 +53,9 @@ public class MCAIManager {
      * @param modelId    The identifier of the AI model.
      * @return A CompletableFuture containing the newly created AIModel object.
      */
-    public CompletableFuture<AIModel> registerModel(int platformId, String modelId) { return this.database.createModel(platformId, modelId); }
+    public CompletableFuture<AIModel> registerModel(int platformId, String modelId) { 
+        return this.database.createModel(platformId, modelId); 
+    }
     
     /**
      * Creates or updates an AI account for a specific user and platform.
