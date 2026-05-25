@@ -57,6 +57,8 @@ public class MCAIManager {
 
     /**
      * Generates a valid AES 256-bit SecretKeySpec from the provided string using SHA-256 hash.
+     * * @param secret The secret string to generate the key from.
+     * @return The generated SecretKeySpec.
      */
     private SecretKeySpec generateEncryptionKey(String secret) {
         try {
@@ -74,6 +76,8 @@ public class MCAIManager {
     /**
      * Encrypts the provided string using AES/CBC/PKCS5Padding with a random IV.
      * The result is a Base64 string containing both the IV and the ciphertext.
+     * * @param strToEncrypt The plain text token to encrypt.
+     * @return The Base64 encoded encrypted token with IV.
      */
     private String encrypt(String strToEncrypt) {
         if (strToEncrypt == null || strToEncrypt.isBlank()) return strToEncrypt;
@@ -101,6 +105,8 @@ public class MCAIManager {
     /**
      * Decrypts the provided string using AES/CBC/PKCS5Padding.
      * Extracts the IV from the first 16 bytes of the decoded Base64 string.
+     * * @param strToDecrypt The encrypted Base64 string.
+     * @return The decrypted plain text token.
      */
     private String decrypt(String strToDecrypt) {
         if (strToDecrypt == null || strToDecrypt.isBlank()) return strToDecrypt;
@@ -293,5 +299,20 @@ public class MCAIManager {
             return CompletableFuture.completedFuture("Error: Unknown Tool '" + toolName + "'");
         }
         return tool.execute(arguments, account);
+    }
+
+    /**
+     * Inserts a new AI chat log into the database.
+     *
+     * @param accountType     The type of the account.
+     * @param accountUuid     The unique identifier of the account owner.
+     * @param platformId      The ID of the associated platform.
+     * @param modelId         The identifier of the AI model.
+     * @param chatHistory     The accumulated chat history string.
+     * @param tokenTotalUsage The total token usage for the session.
+     * @return A CompletableFuture containing the saved AILog object.
+     */
+    public CompletableFuture<AILog> insertLog(String accountType, String accountUuid, int platformId, String modelId, String chatHistory, int tokenTotalUsage) {
+        return this.database.insertLog(accountType, accountUuid, platformId, modelId, chatHistory, tokenTotalUsage);
     }
 }
