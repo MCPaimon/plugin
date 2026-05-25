@@ -3,6 +3,7 @@ package io.github.mcpaimon.papermc.tools;
 import io.github.mcpaimon.api.model.AIAccount;
 import io.github.mcpaimon.api.model.AIPlatform;
 import io.github.mcpaimon.api.tools.AITool;
+import io.github.mcpaimon.bukkit.event.CreateModelEvent;
 import io.github.mcpaimon.common.MCAIManager;
 import io.github.mcpaimon.papermc.MCAIPlugin;
 import org.bukkit.Bukkit;
@@ -54,12 +55,8 @@ public class CreateModel implements AITool {
 
         if (!isConsole) {
             Player sender = Bukkit.getPlayer(UUID.fromString(account.accountUuid()));
-            if (sender == null) {
-                return CompletableFuture.completedFuture("Error: Cannot find sender in game.");
-            }
-
             // Permission Check: Strictly OP only for players
-            if (!sender.isOp()) {
+            if (sender != null && !sender.isOp()) {
                 return CompletableFuture.completedFuture("Error: Access Denied. Only server operators (OP) can register new models.");
             }
         }
@@ -69,6 +66,12 @@ public class CreateModel implements AITool {
 
         if (platformName == null || platformName.isBlank() || modelId == null || modelId.isBlank()) {
             return CompletableFuture.completedFuture("Error: Both 'platformName' and 'modelId' must be provided.");
+        }
+
+        CreateModelEvent event = new CreateModelEvent(account, platformName, modelId);
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
         }
 
         MCAIPlugin plugin = JavaPlugin.getPlugin(MCAIPlugin.class);
