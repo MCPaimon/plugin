@@ -52,7 +52,7 @@ public class DeleteTokenTool implements AITool {
         DeleteTokenEvent event = new DeleteTokenEvent(account, targetType, targetUuid, platformName);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
-            return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
+            return CompletableFuture.completedFuture("Error: " + event.getCancelReason());
         }
 
         MCAIManager manager = JavaPlugin.getPlugin(MCAIPlugin.class).getManager();

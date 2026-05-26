@@ -69,7 +69,7 @@ public class CreatePlatform implements AITool {
         CreatePlatformEvent event = new CreatePlatformEvent(account, displayName, url);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
-            return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
+            return CompletableFuture.completedFuture("Error: " + event.getCancelReason());
         }
 
         MCAIManager manager = JavaPlugin.getPlugin(MCAIPlugin.class).getManager();

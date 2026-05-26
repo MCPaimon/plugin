@@ -12,6 +12,7 @@ import org.bukkit.event.HandlerList;
 public class CreatePlatformEvent extends Event implements Cancellable {
     private static final HandlerList HANDLERS = new HandlerList();
     private boolean cancelled = false;
+    private String cancelReason = "Action blocked by server policy or another plugin.";
     private final AIAccount account;
     private final String platformName;
     private final String url;
@@ -65,6 +66,24 @@ public class CreatePlatformEvent extends Event implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Gets the reason why this event was cancelled.
+     *
+     * @return The cancellation reason.
+     */
+    public String getCancelReason() {
+        return cancelReason;
+    }
+
+    /**
+     * Sets the reason why this event is cancelled.
+     *
+     * @param cancelReason The cancellation reason.
+     */
+    public void setCancelReason(String cancelReason) {
+        this.cancelReason = cancelReason;
     }
 
     @Override

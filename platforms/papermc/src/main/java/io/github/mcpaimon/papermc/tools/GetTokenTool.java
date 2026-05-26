@@ -53,7 +53,7 @@ public class GetTokenTool implements AITool {
         GetTokenEvent event = new GetTokenEvent(account, targetType, targetUuid, platformName);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
-            return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
+            return CompletableFuture.completedFuture("Error: " + event.getCancelReason());
         }
 
         MCAIManager manager = JavaPlugin.getPlugin(MCAIPlugin.class).getManager();

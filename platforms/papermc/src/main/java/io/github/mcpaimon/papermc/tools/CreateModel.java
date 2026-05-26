@@ -71,7 +71,7 @@ public class CreateModel implements AITool {
         CreateModelEvent event = new CreateModelEvent(account, platformName, modelId);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
-            return CompletableFuture.completedFuture("Error: Action blocked by server policy or another plugin.");
+            return CompletableFuture.completedFuture("Error: " + event.getCancelReason());
         }
 
         MCAIPlugin plugin = JavaPlugin.getPlugin(MCAIPlugin.class);
