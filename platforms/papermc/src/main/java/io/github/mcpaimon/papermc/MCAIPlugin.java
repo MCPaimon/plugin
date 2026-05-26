@@ -5,12 +5,8 @@ import io.github.mcpaimon.api.database.IAIDatabase;
 import io.github.mcpaimon.api.model.AIPlatform;
 import io.github.mcpaimon.common.MCAIManager;
 import io.github.mcpaimon.common.MCAIProvider;
-import io.github.mcpaimon.common.client.MCAIAPIClient;
 import io.github.mcpaimon.common.database.postgresql.MCAIPostgreSQL;
 import io.github.mcpaimon.common.database.sqlite.MCAISQLite;
-import io.github.mcpaimon.papermc.commands.MCAICommand;
-import io.github.mcpaimon.papermc.listeners.MCAIListener;
-import io.github.mcpaimon.papermc.tools.*;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -82,21 +78,6 @@ public class MCAIPlugin extends JavaPlugin {
         int maxWorkflowIterations = getConfig().getInt("max_workflow_iterations", 5);
         this.provider = new MCAIProvider(this.manager, database, maxWorkflowIterations);
 
-        // Register Categories
-        logger.info("Registering AI tool categories...");
-        this.manager.createCategory("account_management", "Tools for managing user API tokens and accounts.");
-        this.manager.createCategory("system_management", "Tools for managing the AI plugin system, platforms, and models.");
-        this.manager.createCategory("admin", "Administrative tools that require operator (OP) permissions.");
-
-        // Register Core Tools
-        logger.info("Registering core AI tools...");
-        this.manager.registerTool(new ChangeTokenTool());
-        this.manager.registerTool(new SetTokenTool());
-        this.manager.registerTool(new CreatePlatform());
-        this.manager.registerTool(new CreateModel());
-        this.manager.registerTool(new DeleteTokenTool());
-        this.manager.registerTool(new GetTokenTool());
-
         // Auto-create platforms and models from config safely
         List<String> platformsConfig = getConfig().getStringList("platforms");
         if (platformsConfig != null && !platformsConfig.isEmpty()) {
@@ -161,22 +142,11 @@ public class MCAIPlugin extends JavaPlugin {
             });
         }
 
-        MCAIAPIClient aiClient = new MCAIAPIClient();
-
         logger.info("Loading extensions...");
         this.extensionManager = new MCExtensionManager(-1);
         Executor mainThreadExecutor = command -> Bukkit.getScheduler().runTask(this, command);
         this.extensionManager.loadAllExtensions(this, mainThreadExecutor);
 
-        MCAICommand aiCommand = new MCAICommand(this, aiClient);
-        if (getCommand("ai") != null) {
-            getCommand("ai").setExecutor(aiCommand);
-            getCommand("ai").setTabCompleter(aiCommand);
-        } else {
-            logger.severe("Command 'ai' is not registered in plugin.yml!");
-        }
-        
-        getServer().getPluginManager().registerEvents(new MCAIListener(this, this.provider, aiClient), this);
         logger.info("MCAI Plugin has been successfully enabled!");
     }
 
