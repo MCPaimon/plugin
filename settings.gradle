@@ -15,5 +15,4 @@ rootProject.name = 'mcai'
 
 include 'api'
 include 'common'
-include 'bukkit'
 include 'platforms:papermc'
