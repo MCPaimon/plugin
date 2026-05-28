@@ -1,6 +1,10 @@
 package io.github.mcpaimon.papermc;
 
+import io.github.mcengine.mcextension.api.HostContext;
 import io.github.mcengine.mcextension.common.MCExtensionManager;
+import io.github.mcengine.mcextension.papermc.commands.MCExtensionCommand;
+import io.github.mcengine.mcextension.papermc.context.PaperHostContext;
+import io.github.mcengine.mcextension.papermc.tabcompleters.MCExtensionTabCompleter;
 import io.github.mcpaimon.api.database.IAIDatabase;
 import io.github.mcpaimon.api.model.AIPlatform;
 import io.github.mcpaimon.common.MCAIManager;
@@ -8,6 +12,7 @@ import io.github.mcpaimon.common.MCAIProvider;
 import io.github.mcpaimon.common.database.postgresql.MCAIPostgreSQL;
 import io.github.mcpaimon.common.database.sqlite.MCAISQLite;
 import org.bukkit.Bukkit;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -37,6 +42,11 @@ public class MCAIPlugin extends JavaPlugin {
      * Manager handling the dynamic loading and unloading of extensions.
      */
     private MCExtensionManager extensionManager;
+
+    /**
+     * Host context for MCExtension platform abstraction.
+     */
+    private HostContext hostContext;
 
     /**
      * Set of player UUIDs currently in an active AI chat session.
@@ -143,21 +153,33 @@ public class MCAIPlugin extends JavaPlugin {
         }
 
         logger.info("Loading extensions...");
-        this.extensionManager = new MCExtensionManager(-1);
+        
+        // Initialize MCExtension API via PaperHostContext
+        this.hostContext = new PaperHostContext(this);
+        this.extensionManager = new MCExtensionManager(-1, "papermc");
         Executor mainThreadExecutor = command -> Bukkit.getScheduler().runTask(this, command);
-        this.extensionManager.loadAllExtensions(this, mainThreadExecutor);
+        this.extensionManager.loadAllExtensions(this.hostContext, mainThreadExecutor);
+
+        // Register MCExtension Commands & TabCompleter
+        PluginCommand extensionCmd = getCommand("mcaiextension");
+        if (extensionCmd != null) {
+            extensionCmd.setExecutor(new MCExtensionCommand(this.hostContext, this.extensionManager, mainThreadExecutor));
+            extensionCmd.setTabCompleter(new MCExtensionTabCompleter(this.extensionManager));
+        } else {
+            logger.warning("Command 'mcaiextension' is not defined in plugin.yml. Skipped command registration.");
+        }
 
         logger.info("MCAI Plugin has been successfully enabled!");
     }
 
     @Override
     public void onDisable() {
-        if (this.extensionManager != null) {
+        if (this.extensionManager != null && this.hostContext != null) {
             Executor disableExecutor = command -> {
                 if (this.isEnabled()) Bukkit.getScheduler().runTask(this, command);
                 else command.run(); 
             };
-            this.extensionManager.disableAllExtensions(this, disableExecutor);
+            this.extensionManager.disableAllExtensions(this.hostContext, disableExecutor);
         }
         if (this.provider != null) this.provider.shutdown().join();
         getLogger().info("MCAI Plugin has been disabled!");
