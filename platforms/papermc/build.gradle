@@ -12,10 +12,11 @@ repositories {
 dependencies {
     implementation project(':api')
     implementation project(':common')
+    implementation 'io.github.mcengine:manager:2026.0.6-3'
+    implementation 'io.github.mcengine:papermc:2026.0.6-3'
 
-    implementation 'com.zaxxer:HikariCP:7.0.2'
-    implementation 'io.github.mcengine:mcextension:2026.0.6-1'
-    implementation 'org.mongodb:mongodb-driver-sync:5.7.0'
+    compileOnly 'com.zaxxer:HikariCP:7.0.2'
+    compileOnly 'org.mongodb:mongodb-driver-sync:5.7.0'
     compileOnly 'org.xerial:sqlite-jdbc:3.53.0.0'
 
     compileOnly 'io.papermc.paper:paper-api:26.1.2.build.+'
